@@ -1,0 +1,142 @@
+[
+  {
+    "ward": "chuo",
+    "station": "中央区土木センター",
+    "address": "札幌市中央区北12条西23丁目2-5（S.D.C北12条ビル）",
+    "coordinates": [
+      141.31868,
+      43.071411
+    ],
+    "sources": {
+      "address": "https://www.city.sapporo.jp/shisetsuannai/031.html",
+      "coordinates": "国土地理院 住所検索 https://msearch.gsi.go.jp/address-search/AddressSearch 2026-10-04 取得"
+    },
+    "note": "住所検索の結果は「二十三丁目２番」までで、番号は2番まで一致。"
+  },
+  {
+    "ward": "kita",
+    "station": "北区土木センター",
+    "address": "札幌市北区太平12条2丁目1-7",
+    "coordinates": [
+      141.3517,
+      43.13982
+    ],
+    "sources": {
+      "address": "https://www.city.sapporo.jp/shisetsuannai/032.html",
+      "coordinates": "国土地理院 住所検索 https://msearch.gsi.go.jp/address-search/AddressSearch 2026-10-04 取得"
+    },
+    "note": "札幌市の積雪深ページには北区の観測地点が2か所ある(太平の北区土木センターと、あいの里の拓北水再生プラザ)。CSV「2025kansokukirokukita.csv」の元データセット(sapporo_weather)は「各区土木センター10か所」と明記しているため、北区土木センター(太平)と判断した。CSV自体には地点名の列がなく、直接の裏付けはない。"
+  },
+  {
+    "ward": "higashi",
+    "station": "東区土木センター",
+    "address": "札幌市東区北33条東18丁目1-6",
+    "coordinates": [
+      141.372955,
+      43.103844
+    ],
+    "sources": {
+      "address": "https://www.city.sapporo.jp/shisetsuannai/033.html",
+      "coordinates": "国土地理院 住所検索 https://msearch.gsi.go.jp/address-search/AddressSearch 2026-10-04 取得"
+    },
+    "note": ""
+  },
+  {
+    "ward": "shiroishi",
+    "station": "白石区土木センター",
+    "address": "札幌市白石区本通14丁目南5-32",
+    "coordinates": [
+      141.428802,
+      43.037418
+    ],
+    "sources": {
+      "address": "https://www.city.sapporo.jp/shisetsuannai/034.html",
+      "coordinates": "国土地理院 住所検索 https://msearch.gsi.go.jp/address-search/AddressSearch 2026-10-04 取得"
+    },
+    "note": ""
+  },
+  {
+    "ward": "toyohira",
+    "station": "豊平区土木センター",
+    "address": "札幌市豊平区西岡3条1丁目8-20",
+    "coordinates": [
+      141.390305,
+      43.021069
+    ],
+    "sources": {
+      "address": "https://www.city.sapporo.jp/shisetsuannai/036.html",
+      "coordinates": "国土地理院 住所検索 https://msearch.gsi.go.jp/address-search/AddressSearch 2026-10-04 取得"
+    },
+    "note": ""
+  },
+  {
+    "ward": "minami",
+    "station": "南区土木センター",
+    "address": "札幌市南区南31条西8丁目2-5",
+    "coordinates": [
+      141.350052,
+      43.017345
+    ],
+    "sources": {
+      "address": "https://www.city.sapporo.jp/shisetsuannai/038.html",
+      "coordinates": "国土地理院 住所検索 https://msearch.gsi.go.jp/address-search/AddressSearch 2026-10-04 取得"
+    },
+    "note": "札幌市の積雪深ページには南区の定山渓の観測地点もあるが、土木センターではない。"
+  },
+  {
+    "ward": "nishi",
+    "station": "西区土木センター",
+    "address": "札幌市西区西野290番地",
+    "coordinates": [
+      141.265869,
+      43.077938
+    ],
+    "sources": {
+      "address": "https://www.city.sapporo.jp/shisetsuannai/039.html",
+      "coordinates": "国土地理院 住所検索 https://msearch.gsi.go.jp/address-search/AddressSearch 2026-10-04 取得"
+    },
+    "note": "札幌市の積雪深ページには西区の平和の観測地点もあるが、土木センターではない。"
+  },
+  {
+    "ward": "atsubetsu",
+    "station": "厚別区土木センター",
+    "address": "札幌市厚別区厚別町下野幌45-39",
+    "coordinates": [
+      141.498764,
+      43.039806
+    ],
+    "sources": {
+      "address": "https://www.city.sapporo.jp/shisetsuannai/035.html",
+      "coordinates": "国土地理院 住所検索 https://msearch.gsi.go.jp/address-search/AddressSearch 2026-10-04 取得"
+    },
+    "note": "住所検索の結果は「45番地」までで、枝番は含まない。"
+  },
+  {
+    "ward": "teine",
+    "station": "手稲区土木センター",
+    "address": "札幌市手稲区曙5条5丁目2-1",
+    "coordinates": [
+      141.223541,
+      43.134094
+    ],
+    "sources": {
+      "address": "https://www.city.sapporo.jp/shisetsuannai/040.html",
+      "coordinates": "国土地理院 住所検索 https://msearch.gsi.go.jp/address-search/AddressSearch 2026-10-04 取得"
+    },
+    "note": ""
+  },
+  {
+    "ward": "kiyota",
+    "station": "清田区土木センター",
+    "address": "札幌市清田区平岡2条4丁目1-40",
+    "coordinates": [
+      141.45192,
+      42.997532
+    ],
+    "sources": {
+      "address": "https://www.city.sapporo.jp/shisetsuannai/037.html",
+      "coordinates": "国土地理院 住所検索 https://msearch.gsi.go.jp/address-search/AddressSearch 2026-10-04 取得"
+    },
+    "note": ""
+  }
+]
