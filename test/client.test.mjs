@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createClient, ok } from '../scripts/replayer/client.mjs';
+import { createClient, ok, subscriptionsOrThrow } from '../scripts/replayer/client.mjs';
 
 function fake(responses = {}) {
   const calls = [];
@@ -71,4 +71,17 @@ test('応答しない fetch は、timeoutMs 経過後に reject される', asyn
   const fetchImpl = (url, init) =>
     new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)));
   await assert.rejects(createClient({ ...base, timeoutMs: 20, fetchImpl }).deleteEntity('urn:a'));
+});
+
+test('購読の一覧: 本文が JSON でない 200 では json は null', async () => {
+  const { fetchImpl } = fake({ 'GET /ngsi-ld/v1/subscriptions': { status: 200, body: '<html>oops' } });
+  const r = await createClient({ ...base, fetchImpl }).listSubscriptions();
+  assert.equal(r.json, null);
+});
+
+test('subscriptionsOrThrow: 2xx で配列ならその配列、それ以外は読みやすいエラー', () => {
+  assert.deepEqual(subscriptionsOrThrow({ status: 200, text: '', json: [{ id: 'a' }] }), [{ id: 'a' }]);
+  assert.throws(() => subscriptionsOrThrow({ status: 200, text: '<html>', json: null }), /購読の一覧/);
+  assert.throws(() => subscriptionsOrThrow({ status: 200, text: '{}', json: {} }), /購読の一覧/);
+  assert.throws(() => subscriptionsOrThrow({ status: 500, text: 'err', json: [] }), /500/);
 });

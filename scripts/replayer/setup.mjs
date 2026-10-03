@@ -1,7 +1,7 @@
 // 使い方: npm run setup -- [--from ISO] [--broker-url URL] [--tenant NAME] ...
 // このデモが作ったエンティティと購読(トピックが amedas/ で始まるもの)だけを消して、作り直す。
 import { parseConfig } from './config.mjs';
-import { createClient, ok } from './client.mjs';
+import { createClient, ok, subscriptionsOrThrow } from './client.mjs';
 import { loadDemoData } from './data.mjs';
 import { carryForward } from './schedule.mjs';
 import { buildEntity, buildSubscriptions, entityId } from './payload.mjs';
@@ -15,8 +15,7 @@ try {
   const { wards } = loadDemoData(config.dataDir);
 
   const list = await client.listSubscriptions();
-  if (list.status >= 300) throw new Error(`購読の一覧を取得できません: ${list.status} ${list.text.slice(0, 200)}`);
-  for (const s of list.json.filter(isDemoSubscription)) {
+  for (const s of subscriptionsOrThrow(list).filter(isDemoSubscription)) {
     const r = await client.deleteSubscription(s.id);
     console.log(`購読を削除: ${s.id} (${r.status})`);
   }

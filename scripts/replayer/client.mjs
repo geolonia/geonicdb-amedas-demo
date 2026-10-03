@@ -29,13 +29,20 @@ export function createClient({ apiBase, tenant, context, fetchImpl = fetch, time
     appendAttrs: (id, attrs) => request('POST', `/entities/${enc(id)}/attrs`, attrs),
     async listSubscriptions() {
       const r = await request('GET', '/subscriptions?limit=100');
-      let json = [];
+      let json = null; // 読めなかったときは null(空配列と区別する)
       try {
         json = JSON.parse(r.text || '[]');
       } catch {
-        json = [];
+        json = null;
       }
       return { ...r, json };
     },
   };
+}
+
+// 購読の一覧を安全に取り出す。2xx で、本文が配列でなければ、黙って進まず失敗させる。
+export function subscriptionsOrThrow(list) {
+  if (list.status < 200 || list.status >= 300) throw new Error(`購読の一覧を取得できません: ${list.status} ${list.text.slice(0, 200)}`);
+  if (!Array.isArray(list.json)) throw new Error(`購読の一覧を読み取れません(JSON の配列ではありません): ${list.text.slice(0, 200)}`);
+  return list.json;
 }
