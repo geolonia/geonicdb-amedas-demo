@@ -1,0 +1,18 @@
+{
+  "name": "sapporo-snow-timelapse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "札幌市10区の積雪を、NGSI-LD ブローカーの購読通知でタイムラプス表示するデモ",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "build:data": "node scripts/prepare/build.mjs",
+    "setup": "node scripts/replayer/setup.mjs",
+    "replay": "node scripts/replayer/replay.mjs",
+    "smoke": "node scripts/smoke/smoke.mjs"
+  },
+  "devDependencies": {
+    "mqtt": "^5.16.0"
+  }
+}

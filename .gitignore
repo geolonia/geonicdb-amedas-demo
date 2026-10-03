@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+data/raw/
+.playwright-mcp/
+dist/
+*.log
+replay-*.jsonl
+.DS_Store

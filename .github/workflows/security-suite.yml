@@ -1,0 +1,39 @@
+name: Security Suite
+
+# Runs all of Geolonia's security checks (bumblebee supply-chain,
+# betterleaks secrets, pinact action-pinning, zizmor GitHub Actions audit)
+# and posts a single consolidated PR comment.
+#
+# This is a thin caller of the org reusable, so it stays current as the
+# suite evolves: it floats on the reusable's major tag (@v1), which a
+# vX.Y.Z release fast-forwards, so there is nothing to bump here.
+#
+# Note: if your repo is already covered by the org "Security Suite" ruleset,
+# you do not need this file (it would run the suite twice). Use this template
+# only for repos outside that ruleset.
+
+# No `branches:` filter on purpose: every pull request is scanned, whatever its
+# base. A stacked pull request (opened against another feature branch to keep
+# the diff reviewable) is retargeted to the default branch when its base merges,
+# and that retarget fires no workflow, so filtering by base would leave it
+# permanently unscanned while still looking reviewed.
+on:
+  pull_request:
+
+concurrency:
+  group: security-suite-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    # A called reusable can only downgrade the caller's token, so grant the
+    # union the suite's jobs need; the reusable narrows each job to its own
+    # minimum.
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    uses: geolonia/.github/.github/workflows/reusable-security-suite.yml@v1
