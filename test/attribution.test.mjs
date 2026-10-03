@@ -39,3 +39,17 @@ test('観測地点の座標について、国土地理院の出典と加工し�
   assert.ok(md.includes('住所'));
   assert.ok(md.includes('加工'));
 });
+
+test('国土数値情報のデータページと推奨の出典形式を含む', () => {
+  const md = renderAttribution(meta);
+  assert.ok(md.includes('https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html'));
+  assert.ok(md.includes(meta.n03.url));
+  assert.ok(md.includes('「国土数値情報(行政区域データ)」(国土交通省)'));
+  assert.ok(md.includes('を加工して作成'));
+});
+
+test('札幌市の節から、区ごとの CSV の URL の所在を示す', () => {
+  const md = renderAttribution(meta);
+  assert.ok(md.includes('data/source-meta.json'));
+  assert.ok(md.includes('data/observations/*.json'));
+});

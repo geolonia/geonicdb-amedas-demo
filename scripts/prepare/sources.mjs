@@ -16,11 +16,14 @@ export async function download(url, dest) {
   writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
 }
 
-export async function ensureN03(rawDir, { refresh = false } = {}) {
+export async function ensureN03(rawDir, { refresh = false, onDownload = () => {} } = {}) {
   mkdirSync(rawDir, { recursive: true });
   const zip = join(rawDir, N03.zip);
   const geojson = join(rawDir, N03.geojson);
-  if (refresh || !existsSync(zip)) await download(N03.url, zip);
+  if (refresh || !existsSync(zip)) {
+    await download(N03.url, zip);
+    onDownload();
+  }
   if (refresh || !existsSync(geojson)) execFileSync('unzip', ['-o', '-q', zip, N03.geojson, '-d', rawDir]);
   return geojson;
 }

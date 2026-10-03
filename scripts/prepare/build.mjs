@@ -5,6 +5,7 @@ import { WARDS } from '../lib/wards.mjs';
 import { parseObservationCsv } from './parse-csv.mjs';
 import { packObservations, summarizeMissing } from '../lib/observations.mjs';
 import { renderAttribution } from './attribution.mjs';
+import { recordRetrievedAt, readRetrievedAt } from './retrieved-at.mjs';
 
 const refresh = process.argv.includes('--refresh');
 const RAW = 'data/raw';
@@ -13,7 +14,7 @@ const OUT = 'data';
 mkdirSync(OUT, { recursive: true });
 
 // 1. 区の境界
-const n03Path = await ensureN03(RAW, { refresh });
+const n03Path = await ensureN03(RAW, { refresh, onDownload: () => recordRetrievedAt(RAW) });
 const wards = extractWards(JSON.parse(readFileSync(n03Path, 'utf8')));
 writeFileSync(`${OUT}/wards.geojson`, JSON.stringify(wards));
 console.log(`${OUT}/wards.geojson: ${wards.features.length} 区(${N03.version})`);
@@ -28,7 +29,10 @@ for (const w of WARDS) {
   if (!url) throw new Error(`CKAN に ${w.name} の 2025 年の CSV がありません`);
   resources[w.id] = url;
   const csvPath = `${RAW}/sapporo-2025-${w.id}.csv`;
-  if (refresh || !existsSync(csvPath)) await download(url, csvPath);
+  if (refresh || !existsSync(csvPath)) {
+    await download(url, csvPath);
+    recordRetrievedAt(RAW);
+  }
   const observations = parseObservationCsv(readFileSync(csvPath, 'utf8'), { month: MONTH });
   const { rows, missing } = summarizeMissing(observations);
   const packed = packObservations(observations);
@@ -39,7 +43,7 @@ for (const w of WARDS) {
 
 // 3. 出典
 const meta = {
-  retrievedAt: new Date().toISOString().slice(0, 10),
+  retrievedAt: readRetrievedAt(RAW),
   ckan: {
     title: pkg.title,
     license: pkg.license_title,

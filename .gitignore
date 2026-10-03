@@ -7,3 +7,5 @@ dist/
 *.log
 replay-*.jsonl
 .DS_Store
+.claude/
+.superpowers/

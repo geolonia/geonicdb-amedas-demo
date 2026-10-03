@@ -10,7 +10,7 @@
 ## データの出典
 
 札幌市の気象観測データ(CC BY 4.0)などを加工して使っています。出典と加工の内容は
-[data/ATTRIBUTION.md](data/ATTRIBUTION.md)(データの作成後に追加)を参照してください。
+[data/ATTRIBUTION.md](data/ATTRIBUTION.md)を参照してください。
 
 ## ライセンス
 

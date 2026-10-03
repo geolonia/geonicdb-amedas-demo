@@ -22,6 +22,9 @@ test('属性別の欠測数が想定の範囲に収まる', () => {
   for (const w of WARDS) {
     const { missing } = summarizeMissing(load(w.id).observations);
     assert.ok(missing.temperature >= 0 && missing.temperature <= 1500, `${w.id}: 気温の欠測 ${missing.temperature}`);
+    assert.ok(missing.windDirection >= 0 && missing.windDirection <= 200, `${w.id}: 風向の欠測 ${missing.windDirection}`);
+    assert.ok(missing.windSpeed >= 0 && missing.windSpeed <= 200, `${w.id}: 風速の欠測 ${missing.windSpeed}`);
+    assert.ok(missing.precipitation >= 0 && missing.precipitation <= 20, `${w.id}: 降水量の欠測 ${missing.precipitation}`);
     assert.ok(missing.snowHeight <= 20, `${w.id}: 積雪深の欠測 ${missing.snowHeight}`);
   }
 });

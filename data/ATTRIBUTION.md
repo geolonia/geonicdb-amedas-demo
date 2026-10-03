@@ -7,15 +7,16 @@
 - 作成者: 札幌市建設局雪対策室事業課
 - データセット: [札幌市内の気象観測記録（区別・年次別）](https://ckan.pf-sapporo.jp/dataset/sapporo_weather)
 - ライセンス: クリエイティブ・コモンズ 表示 4.0 国際([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.ja))
-- 取得日: 2026-10-03(データセットの最終更新日: 2026-06-29)
+- 取得日: 2026-10-04(データセットの最終更新日: 2026-06-29)
 - 改変: 2025年のうち 2025-11-01 〜 2025-11-30 の分(10区、10分ごと)だけを抽出し、CSV から JSON に形式を変換しました。
   欠測(「×」など)は、その属性を持たない形にしました。時刻は JST から UTC に変換し、24:00 は翌日の 00:00 として扱いました。
   数値の変更はしていません。変換後のデータは `data/observations/` にあります。
+  区ごとの CSV の URL は、`data/source-meta.json` と、各 `data/observations/*.json` の `source` に記録しています。
 
 ## 区の境界(国土数値情報)
 
-- 出典: 国土数値情報(行政区域データ N03-20250101)(国土交通省)
-- 取得元: https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2025/N03-20250101_01_GML.zip
+- 出典: 「国土数値情報(行政区域データ)」(国土交通省)(N03-20250101)を加工して作成
+- 取得元: https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2025/N03-20250101_01_GML.zip(データのページ: https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html)
 - 加工: 札幌市10区だけを抽出し、座標を小数点以下4桁に丸めて GeoJSON にしました(国土数値情報を加工して作成)。
   結果は `data/wards.geojson` にあります。
 
