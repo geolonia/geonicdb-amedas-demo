@@ -1251,6 +1251,11 @@ test('不正な値は、分かりやすいエラーにする', () => {
   assert.throws(() => parseConfig(['--interval', '0'], {}), /--interval/);
   assert.throws(() => parseConfig(['--interval', 'abc'], {}), /--interval/);
   assert.throws(() => parseConfig(['--from', 'xxx'], {}), /--from/);
+  // タイムゾーンのない日時は受け付けない
+  assert.throws(() => parseConfig(['--from', '2025-11-18'], {}), /--from.*タイムゾーン/);
+  assert.throws(() => parseConfig(['--from', '2025-11-18T10:00:00'], {}), /--from.*タイムゾーン/);
+  assert.throws(() => parseConfig(['--to', '2025-11-19T00:00:00'], {}), /--to.*タイムゾーン/);
+  assert.equal(parseConfig(['--from', '2025-11-18T01:00:00Z'], {}).from, '2025-11-18T01:00:00Z');
   assert.throws(() => parseConfig(['--from', '2025-11-19T00:00:00+09:00', '--to', '2025-11-18T00:00:00+09:00'], {}), /--to.*--from/);
   assert.throws(() => parseConfig(['--unknown'], {}));
 });
@@ -1270,7 +1275,7 @@ export const DEFAULTS = Object.freeze({
   mqttVersion: 'mqtt5.0',
   from: '2025-11-18T02:50:00+09:00',
   to: '2025-11-19T00:00:00+09:00',
-  // 1 ステップ(観測 10 分)に当てる実時間のミリ秒。Stellio での測定結果で、Task 9 で更新する。
+  // 1 ステップ(観測 10 分)に当てる実時間のミリ秒。**測定前の暫定値**。Stellio での測定結果で、Task 9 で更新する。
   interval: 4000,
   dataDir: 'data',
 });
@@ -1294,13 +1299,15 @@ export function parseConfig(argv, env = {}) {
   const pick = (opt, envKey, def) => values[opt] ?? env[envKey] ?? def;
 
   const brokerUrl = String(pick('broker-url', 'BROKER_URL', DEFAULTS.brokerUrl)).replace(/\/+$/, '');
-  const from = pick('from', 'FROM', DEFAULTS.from);
-  const to = pick('to', 'TO', DEFAULTS.to);
-  const intervalMs = Number(pick('interval', 'INTERVAL_MS', DEFAULTS.interval));
+  const from = pick('from', 'REPLAY_FROM', DEFAULTS.from);
+  const to = pick('to', 'REPLAY_TO', DEFAULTS.to);
+  const intervalMs = Number(pick('interval', 'REPLAY_INTERVAL_MS', DEFAULTS.interval));
 
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) throw new Error('--interval は正の数(ミリ秒)で指定してください');
-  if (Number.isNaN(Date.parse(from))) throw new Error(`--from を日時として読めません: ${from}`);
-  if (Number.isNaN(Date.parse(to))) throw new Error(`--to を日時として読めません: ${to}`);
+  // タイムゾーンのない日時は、実行する機のタイムゾーンで解釈され、会場の機で再生範囲がずれる。必ず指定させる。
+  const hasOffset = (s) => /(Z|[+-]\d{2}:?\d{2})$/.test(s);
+  if (Number.isNaN(Date.parse(from)) || !hasOffset(from)) throw new Error(`--from を、+09:00 のようなタイムゾーンつきの日時で指定してください: ${from}`);
+  if (Number.isNaN(Date.parse(to)) || !hasOffset(to)) throw new Error(`--to を、+09:00 のようなタイムゾーンつきの日時で指定してください: ${to}`);
   if (Date.parse(to) < Date.parse(from)) throw new Error('--to は --from 以降にしてください');
 
   return {
@@ -1837,7 +1844,8 @@ test('ok(): 2xx だけが成功。207(一部失敗)と 4xx/5xx は失敗', () =>
 `scripts/replayer/client.mjs`:
 
 ```js
-export const ok = (r) => r.status >= 200 && r.status < 300;
+// 207(一部の属性だけ失敗)は、成功としない。
+export const ok = (r) => r.status >= 200 && r.status < 300 && r.status !== 207;
 
 export function createClient({ apiBase, tenant, context, fetchImpl = fetch }) {
   const link = `<${context}>; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"`;
@@ -1983,8 +1991,9 @@ async function write(wardId, obs, t) {
   const id = entityId(wardId);
   const sentAt = new Date().toISOString();
   patch.sentAt = sentAtProperty(sentAt);
-  let status = (await client.patchAttrs(id, patch)).status;
-  let success = status >= 200 && status < 300;
+  const pr = await client.patchAttrs(id, patch);
+  let status = pr.status;
+  let success = ok(pr);
   if (success && Object.keys(append).length > 0) {
     const r = await client.appendAttrs(id, append);
     status = r.status;
@@ -2062,10 +2071,15 @@ gh api "repos/stellio-hub/stellio-context-broker/contents/.env?ref=$REF" --jq .c
 
 # --- このリポジトリでの変更: ポートを 127.0.0.1 にだけ公開する ---
 API_GATEWAY_PORT=127.0.0.1:8080
-SEARCH_SERVICE_PORT=127.0.0.1:8083
-SUBSCRIPTION_SERVICE_PORT=127.0.0.1:8084
-POSTGRES_PORT=127.0.0.1:5432
-KAFKA_PORT=127.0.0.1:29092
+# デモで使うのは API ゲートウェイ(8080)だけ。ほかは、手元の PostgreSQL などと衝突しにくい番号にする。
+SEARCH_SERVICE_PORT=127.0.0.1:18083
+SUBSCRIPTION_SERVICE_PORT=127.0.0.1:18084
+POSTGRES_PORT=127.0.0.1:55432
+KAFKA_PORT=127.0.0.1:39092
+
+# upstream の .env にない変数(未設定だと compose が警告を出す)。認証は無効なので空でよい。
+APPLICATION_TENANTS_0_CLIENTID=
+APPLICATION_TENANTS_0_CLIENTSECRET=
 ```
 
 `compose/NOTICE.md`:
@@ -2154,7 +2168,7 @@ docker compose -f compose/docker-compose.yml config -q && echo OK
 docker compose -f compose/docker-compose.yml config | grep -E "published|host_ip" | sort -u
 ```
 
-期待: `OK`。公開されているポートが、すべて `127.0.0.1`(`host_ip: 127.0.0.1`)になっている。`0.0.0.0` が出る場合は、`stellio.env` の追記が効いていない。`include` の `env_file` が、入れ子の compose(`docker-compose-dependencies.yml`)に効かない場合は、`compose/stellio/docker-compose.yml` の先頭の `include:` を、`path` と `env_file` の長い書き方にして直す。
+期待: `OK`。公開されているポートが、すべて `127.0.0.1`(`host_ip: 127.0.0.1`)になっている。`0.0.0.0` が出る場合は、`stellio.env` の追記が効いていない。(計画のレビューでは、`include` の `env_file` は、入れ子の compose にも効くことを確認済み。)
 
 ```bash
 docker compose -f compose/docker-compose.yml up -d
@@ -2385,26 +2399,36 @@ npm run smoke -- --from 2025-11-18T15:00:00+09:00 --to 2025-11-18T15:30:00+09:00
 
 - [ ] **Step 6: Stellio で、通知が遅れない速度を測る**
 
-40ステップの範囲で、速度を変えて測る(正時の降雪量と、通常の書き込みの両方を含む)。結果を、表にして記録する。
+計画のレビューで、**既定の 4,000ms/ステップはもちろん、5,000ms/ステップでも通知が大きく滞留した**(4〜6ステップの再生で、遅延の p95 が 90〜135 秒、後半の遅延が前半の約5倍)。Stellio は、書き込みの属性ごとに購読を評価するため、1ステップ(10区×約7属性=約70イベント)の処理に、数秒〜数十秒かかるとみられる。測定は、負荷を減らす手段を先に試し、そのあとで速度を探す。
+
+まず、1回の測定を、12ステップ(正時の降雪量と、通常の書き込みの両方を含む範囲)にする。滞留が起きていれば、これで十分に見える。測定の前に、毎回、通知の滞留を流し切る(`docker compose -f compose/docker-compose.yml restart stellio-subscription-service` のあと、1分待つ)。
 
 ```bash
-for i in 4000 3000 2000 1500 1000; do
-  echo "=== interval ${i}ms"
-  npm run smoke -- --from 2025-11-18T12:00:00+09:00 --to 2025-11-18T18:30:00+09:00 --interval $i 2>&1 | tail -8
+RANGE="--from 2025-11-18T12:00:00+09:00 --to 2025-11-18T13:50:00+09:00"
+# (a) 負荷を減らす: 前回と同じ値の属性を書かない
+for i in 20000 10000 5000 3000; do
+  echo "=== changed-only interval ${i}ms"
+  npm run smoke -- $RANGE --changed-only --interval $i 2>&1 | tail -8
+done
+# (b) 全属性を書く
+for i in 30000 20000 10000; do
+  echo "=== all-attributes interval ${i}ms"
+  npm run smoke -- $RANGE --interval $i 2>&1 | tail -8
 done
 ```
 
-判定の基準(設計書 4.4): 欠落が 0 件、p95 の遅延が 2,000ms 以下、最後の4分の1の遅延の中央値が、最初の4分の1の2倍(と500ms)以内。基準を満たす最小の `--interval` を、「遅れが出ない速度」とする。
+判定の基準(設計書 4.4): 欠落が 0 件、p95 の遅延が 2,000ms 以下、最後の4分の1の遅延の中央値が、最初の4分の1の2倍(と500ms)以内。基準を満たす最小の `--interval` と、そのときの組み合わせ(`--changed-only` の有無)を、「遅れが出ない速度」とする。
 
-どの速度でも基準を満たさない場合は、負荷を減らす:
+結果を、次の表にして記録する(測定の環境、Mac の機種と Docker に割り当てたメモリも)。
 
-```bash
-npm run smoke -- --changed-only --from 2025-11-18T12:00:00+09:00 --to 2025-11-18T18:30:00+09:00 --interval 2000
-```
+| 組み合わせ | interval | 欠落 | 遅延の中央値 / p95 / 最大 | 最初の1/4 → 最後の1/4 | 判定 |
+|---|---|---|---|---|---|
 
-それでも満たさない場合は、作業を止め、測定結果をユーザーに報告して、方針(区の間隔を空ける、属性数を減らす、成功基準の見直し)を相談する。
-
-測定の環境(Mac の機種、Docker に割り当てたメモリ)も記録する。
+**基準を満たす速度が、実用的でない場合は、作業を止めて、測定結果をユーザーに報告する。** 実用的でないとは、既定の範囲(128ステップ)の再生に 30 分以上かかる、つまり `--interval` が約 14,000ms を超える場合を指す。この場合の選択肢は次のとおり(どれにするかは、ユーザーが決める)。
+1. 書き込む属性を、地図に必要なものだけに減らす(気温、積雪深、降雪量)。
+2. 公開側の README では「Stellio では、速度を落として再生する(約 N 倍速)。発表では、別のブローカーを使う」と説明する。
+3. 公開側の動作確認の対象を、Stellio 以外の OSS ブローカーにも広げる(ただし、時間の制約がある)。
+4. 成功基準 2(OSS のブローカーで再現できる)を、「動作する(速度は落とす)」という表現に改める。
 
 - [ ] **Step 7: 既定の速度を更新する**
 
@@ -2432,7 +2456,7 @@ docker compose -f compose/docker-compose.yml up -d
 docker compose -f compose/docker-compose.yml ps    # すべて running になるまで待つ
 
 npm run setup         # エンティティと購読を作る
-npm run replay        # 2025-11-18 の1日を、<測定した値>ms/ステップ で再生する
+npm run replay        # 2025-11-18 の1日を、<測定した値>ms/ステップ で再生する(測定前の暫定値は 4000ms。Stellio では滞留するため、Task 9 で測った値に置き換える)
 ```
 
 通知は、MQTT のトピック `amedas/live`、`amedas/cond/snowfall1h_ge5`、`amedas/cond/snowfall1h_ge3` に届きます
