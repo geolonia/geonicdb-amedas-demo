@@ -1,0 +1,27 @@
+{
+  "retrievedAt": "2026-10-03",
+  "ckan": {
+    "title": "札幌市内の気象観測記録（区別・年次別）",
+    "license": "クリエイティブ・コモンズ 表示 4.0 国際",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/deed.ja",
+    "author": "札幌市建設局雪対策室事業課",
+    "modified": "2026-06-29",
+    "url": "https://ckan.pf-sapporo.jp/dataset/sapporo_weather"
+  },
+  "n03": {
+    "version": "N03-20250101",
+    "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2025/N03-20250101_01_GML.zip"
+  },
+  "resources": {
+    "chuo": "https://ckan.pf-sapporo.jp/dataset/214427f1-4f4d-4a85-9450-011db2f787fb/resource/54f129e4-593d-477a-804c-b81581778348/download/2025kansokukirokuchuo.csv",
+    "kita": "https://ckan.pf-sapporo.jp/dataset/214427f1-4f4d-4a85-9450-011db2f787fb/resource/c8e9c17e-22d1-4c58-81f6-60bf282d6e0f/download/2025kansokukirokukita.csv",
+    "higashi": "https://ckan.pf-sapporo.jp/dataset/214427f1-4f4d-4a85-9450-011db2f787fb/resource/aa531270-de21-41cd-91a6-432cae5a1d94/download/2025kansokukirokuhigashi.csv",
+    "shiroishi": "https://ckan.pf-sapporo.jp/dataset/214427f1-4f4d-4a85-9450-011db2f787fb/resource/06d8574c-f275-4b75-9f21-3319e5eb1a8c/download/2025kansokukirokusiroishi.csv",
+    "toyohira": "https://ckan.pf-sapporo.jp/dataset/214427f1-4f4d-4a85-9450-011db2f787fb/resource/e95f7e4d-2c55-4ed3-a319-f8f9c5653ae3/download/2025kansokukirokutoyohira.csv",
+    "minami": "https://ckan.pf-sapporo.jp/dataset/214427f1-4f4d-4a85-9450-011db2f787fb/resource/8b472529-76da-4c50-9cd6-812571d1a3a3/download/2025kansokukirokuminami.csv",
+    "nishi": "https://ckan.pf-sapporo.jp/dataset/214427f1-4f4d-4a85-9450-011db2f787fb/resource/0592780f-6365-403b-aed9-343499873915/download/2025kansokukirokunishi.csv",
+    "atsubetsu": "https://ckan.pf-sapporo.jp/dataset/214427f1-4f4d-4a85-9450-011db2f787fb/resource/21f935de-2c71-4654-aa92-41f6d1736f23/download/2025kansokukirokuatsubetu.csv",
+    "teine": "https://ckan.pf-sapporo.jp/dataset/214427f1-4f4d-4a85-9450-011db2f787fb/resource/e1a95545-6146-4cca-b05c-15c946555d77/download/2025kansokukirokuteine.csv",
+    "kiyota": "https://ckan.pf-sapporo.jp/dataset/214427f1-4f4d-4a85-9450-011db2f787fb/resource/5b5b25a5-bac4-4bff-a333-5a04281bcae8/download/2025kansokukirokukiyota.csv"
+  }
+}

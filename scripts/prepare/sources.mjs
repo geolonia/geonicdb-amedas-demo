@@ -24,3 +24,20 @@ export async function ensureN03(rawDir, { refresh = false } = {}) {
   if (refresh || !existsSync(geojson)) execFileSync('unzip', ['-o', '-q', zip, N03.geojson, '-d', rawDir]);
   return geojson;
 }
+
+export const CKAN_PACKAGE = 'https://ckan.pf-sapporo.jp/api/3/action/package_show?id=sapporo_weather';
+
+// CKAN のリソース名は「2025年　中央区　気象観測記録」(区切りは全角スペース)。
+// ファイル名の綴りは区ごとに揺れているため、名称から区を引く。
+export async function ckanResources(year = 2025) {
+  const res = await fetch(CKAN_PACKAGE);
+  if (!res.ok) throw new Error(`CKAN の取得に失敗しました: ${res.status}`);
+  const pkg = (await res.json()).result;
+  const re = new RegExp(`^${year}年\\s*(.+?)\\s*気象観測記録$`);
+  const byName = new Map();
+  for (const r of pkg.resources) {
+    const m = re.exec(r.name);
+    if (m && r.format === 'CSV') byName.set(m[1], r.url);
+  }
+  return { pkg, byName };
+}
