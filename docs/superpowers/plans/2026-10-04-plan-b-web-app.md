@@ -591,7 +591,9 @@ ls dist/web dist/web/assets
 npm run web:dev
 ```
 
-Playwright MCP で `browser_navigate` → `http://127.0.0.1:5173/`、`browser_snapshot`。期待: 見出し「札幌市10区の積雪」、「観測時刻(データの時刻)」「現在時刻」の見出しと「—」、HUD の行、出典の文(札幌市、国土数値情報、国土地理院)が読める。確認したら Ctrl+C で止める。
+Playwright MCP で `browser_navigate` → `http://127.0.0.1:5173/`、`browser_snapshot`。期待: 見出し「札幌市10区の積雪」、「観測時刻(データの時刻)」「現在時刻」の見出しと「—」、HUD の行、出典の文(札幌市、国土数値情報、国土地理院)が読める。確認したら止める。
+
+`npm run web:dev` と `npm run web:preview` は、止めるまで端末を占有する。エージェントが実行するときは、バックグラウンドで起動し(Bash の `run_in_background`、または末尾に `&`)、確認が終わったら止める(`pkill -f "vite.*web/vite.config.js"`)。以降のタスクの「別の端末で」も同じ扱いにする。Playwright MCP が保存できるのはリポジトリの中だけなので、スクリーンショットや `browser_evaluate` の `filename` は `.playwright-mcp/`(gitignore 済み)に保存し、確認のあとでリポジトリの外へ移す(`browser_evaluate` の `filename` に保存されるのは、戻り値の JSON そのもの。2026-10-04 に確認)。
 
 - [ ] **Step 6: ESLint を入れる**
 
@@ -2897,7 +2899,7 @@ npm run fake-notify -- --from 2025-11-18T06:50:00+09:00 --to 2025-11-18T07:10:00
 
 期待: `browser_evaluate` の `s.total` が 30、`s.cond` が `{ ge5: 1, ge3: 1 }`、`clock` が `2025-11-17T22:10:00.000Z`。
 
-再接続: `docker compose -f compose/docker-compose.yml stop mosquitto` → 数秒待って `browser_evaluate` → `() => document.getElementById('hud').dataset.status`(期待: `reconnecting` か `disconnected`。HUD の点が灰色か橙)→ `docker compose -f compose/docker-compose.yml start mosquitto` → 5秒後に同じ式で `connected`。続けて上の `--bare` のコマンドをもう一度流し、`s.total` が 30 増える(60 になる)ことを確かめる(購読が二重になっていれば 90 になる)。
+再接続: `docker compose -f compose/docker-compose.yml stop mosquitto` → 数秒待って `browser_evaluate` → `() => document.getElementById('hud').dataset.status`(期待: `reconnecting` か `disconnected`。HUD の点が灰色か橙)→ `docker compose -f compose/docker-compose.yml start mosquitto` → 5秒後に同じ式で `connected`。続けて上の `--bare` のコマンドをもう一度流し、`s.total` が 30 増える(60 になる)ことを確かめる(再接続のあとも購読が成立している)。同じトピックの購読を同じクライアントが送り直しても、MQTT では置き換えになり、通知は二重には届かない。`resubscribe: false` は、再購読を接続のたびの1回にそろえるための設定。
 
 - [ ] **Step 6: コミット**
 
@@ -4491,7 +4493,7 @@ node scripts/smoke/compare-browser.mjs ~/sapporo-e2e/replay.jsonl ~/sapporo-e2e/
 
 **型と名前の整合:** `Observation`(Task 3)は Task 4〜6、8、10〜12、16 で同じ形を使う。`Decision`(Task 4)の `key`、`tier`、`ward`、`value` は Task 11 の `ripples.hit`、`createHitList.render`、Task 18 の `installSound` で使う。`WardState`(Task 5)の `snowHeight`、`temperature`、`snowfall1h`、`snowDelta1h`、`windSpeed` は Task 9(`labels.update`)、Task 10(`setSnow`)、Task 12(ログ)、Task 16(`snowIntensity`)で使う。`app` の `on`、`positions`、`mapLayer`、`fx`、`wardNames`、`config`(Task 10)と、`app.ripples`(Task 11)、`app.controls`(Task 12)、`app.snow`(Task 16)、`app.soundPlays`(Task 18)は、定義したタスクより後でだけ使う。`snowColorExpression`(Task 7)は Task 9、13、17 で同じ名前。`window.__sapporo.received` の要素の `id` と `sentAt`(Task 10)は、`compare-browser.mjs`(Task 19)のキー `` `${id}|${sentAt}` `` と、`replay --log` の `id`、`sentAt` に一致する。
 
-**Review Focus:** 5項目のそれぞれに、担当のタスクのテスト(または画面の確認の手順)を入れた。MQTT の再接続で購読が二重にならないこと(`resubscribe: false` と、接続のたびの購読)は、単体テストにできないため、Task 10 Step 5 の画面の確認(件数が 30 ずつ増える)で確かめる。
+**Review Focus:** 5項目のそれぞれに、担当のタスクのテスト(または画面の確認の手順)を入れた。MQTT の再接続のあとも購読が成立していること(`resubscribe: false` と、接続のたびの購読)は、単体テストにできないため、Task 10 Step 5 の画面の確認(件数が 30 ずつ増える)で確かめる。
 
 **計画を書いたときに確かめたこと(2026-10-04)**
 - `npm view`: vite 8.3.2、maplibre-gl 6.12.0、mqtt 5.16.0、eslint 10.12.0、@eslint/js 10.0.1、globals 17.13.0。
