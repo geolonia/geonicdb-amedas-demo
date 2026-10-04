@@ -17,6 +17,8 @@ import { connectFeed } from './mqtt-feed.js';
 import { createClocks } from './panels/clocks.js';
 import { createHud } from './panels/hud.js';
 import { installHitEffects } from './effects/hit-effects.js';
+import { installControls } from './panels/controls.js';
+import { installLog } from './panels/log.js';
 
 async function main() {
   // 現在時刻の時計は、データを読む前に始める(読み込みに失敗しても止めない)
@@ -112,6 +114,8 @@ async function main() {
 
   // ---- 演出の組み込み(1行ずつ。削るときは、その行を消す) ----
   installHitEffects(app);
+  installControls(app);
+  installLog(app);
 }
 
 main().catch((e) => {
