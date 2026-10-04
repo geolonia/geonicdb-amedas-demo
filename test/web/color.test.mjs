@@ -95,3 +95,27 @@ test('ヒットのピルの色は、CSS の --pill5-bg / --pill5-text / --pill3-
   assert.ok(css.includes(`--pill3-bg: ${HIT_PILL.ge3.bg};`));
   assert.ok(css.includes(`--pill3-text: ${HIT_PILL.ge3.text};`));
 });
+
+// CSS から、#attribution の文字色と、--panel の rgba、--bg を読む(テストが CSS に追従する)
+function attributionStyle() {
+  const css = readFileSync('web/src/style.css', 'utf8');
+  const block = /#attribution\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  const fg = /(?:^|;|\s)color:\s*(#[0-9a-f]{6})\s*;/i.exec(block)?.[1];
+  const usesPanel = /background:\s*var\(--panel\)/.test(block);
+  const panel = /--panel:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/.exec(css);
+  const bg = /--bg:\s*(#[0-9a-f]{6})/i.exec(css)?.[1];
+  return { fg, usesPanel, bg, panel: panel && { r: +panel[1], g: +panel[2], b: +panel[3], a: +panel[4] } };
+}
+
+test('出典(#attribution)は、パネルの背景を持ち、どの区の色(0〜80cm、欠測)の上でも、背景の上でも、コントラスト比 4.5 以上', () => {
+  const { fg, usesPanel, bg, panel } = attributionStyle();
+  assert.ok(fg, '文字色が読めない');
+  assert.ok(usesPanel, '背景に var(--panel) を使う');
+  assert.ok(panel && bg);
+  for (let cm = 0; cm <= 80; cm++) {
+    const ratio = contrastRatio(fg, compositeOver(panel, snowColor(cm)));
+    assert.ok(ratio >= 4.5, `${cm}cm: ${ratio}`);
+  }
+  assert.ok(contrastRatio(fg, compositeOver(panel, NO_DATA_COLOR)) >= 4.5, '欠測の区');
+  assert.ok(contrastRatio(fg, compositeOver(panel, bg)) >= 4.5, '背景');
+});

@@ -231,15 +231,21 @@ body {
   border-radius: 3px;
 }
 
-/* 出典は、演出の切り替えに関係なく常に表示する */
+/* 出典(CC BY 4.0 の表示)は、演出の切り替えに関係なく常に表示する */
 #attribution {
   position: absolute;
   left: 12px;
-  right: 12px;
   bottom: 8px;
   z-index: 6;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  box-sizing: border-box;
+  padding: 2px 8px;
+  border-radius: 6px;
   font-size: 11px;
-  color: #8295b5;
+  /* 区の面(0〜80cm、欠測)の上でもコントラスト比 4.5 以上にするため、パネルの背景を付ける(test/web/color.test.mjs が確かめる) */
+  color: #a9b8d0;
+  background: var(--panel);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
