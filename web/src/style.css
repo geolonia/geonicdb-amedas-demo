@@ -301,3 +301,101 @@ body {
 #fatal[hidden] {
   display: none;
 }
+
+/* ---- 波紋と条件ヒット(Task 11) ---- */
+.ring {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  margin: -40px 0 0 -40px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(160, 215, 255, 0.55);
+  opacity: 0;
+  transform: scale(0.1);
+  animation: ring-live 1.3s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes ring-live {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.ring.ring-hit {
+  width: 300px;
+  height: 300px;
+  margin: -150px 0 0 -150px;
+  border-width: 4px;
+  animation: ring-hit 2.2s cubic-bezier(0.15, 0.6, 0.3, 1) forwards;
+}
+
+.ring.ring-hit.ge3 {
+  border-color: var(--hit3);
+  box-shadow: 0 0 22px var(--hit3), inset 0 0 22px var(--hit3);
+}
+
+.ring.ring-hit.ge5 {
+  border-color: var(--hit5);
+  box-shadow: 0 0 26px var(--hit5), inset 0 0 26px var(--hit5);
+}
+
+.ring.ring-hit.delayed {
+  animation-delay: 0.35s;
+}
+
+@keyframes ring-hit {
+  0% {
+    opacity: 0.95;
+    transform: scale(0.08);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.hit-label {
+  position: absolute;
+  z-index: 2;
+  white-space: nowrap;
+  font-size: 20px;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 999px;
+  color: #1a0b12;
+  background: var(--hit3);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  animation: hit-label 4s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+.hit-label.ge5 {
+  color: #ffffff;
+  background: var(--hit5);
+}
+
+@keyframes hit-label {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30px) scale(0.6);
+  }
+  8% {
+    opacity: 1;
+    transform: translate(-50%, -64px) scale(1.05);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -80px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -104px);
+  }
+}

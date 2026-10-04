@@ -15,6 +15,7 @@ import { createWardLabels } from './labels.js';
 import { connectFeed } from './mqtt-feed.js';
 import { createClocks } from './panels/clocks.js';
 import { createHud } from './panels/hud.js';
+import { installHitEffects } from './effects/hit-effects.js';
 
 async function main() {
   // 現在時刻の時計は、データを読む前に始める(読み込みに失敗しても止めない)
@@ -101,6 +102,7 @@ async function main() {
   window.__sapporo = { app, stats: () => stats.snapshot(Date.now()), clock: () => store.clock(), ward: (w) => store.get(w), received: debugLog };
 
   // ---- 演出の組み込み(1行ずつ。削るときは、その行を消す) ----
+  installHitEffects(app);
 }
 
 main().catch((e) => {
