@@ -4,6 +4,13 @@ import { formatSnowDepth, formatTemperature, formatTimeOfDay } from '../lib/form
 
 const MAX_ROWS = 40;
 
+// tick の間に溜まる行(古い順に push する)を、新しい方から max 件だけ残す(裏のタブで tick が間引かれても、溜まり続けない)。
+// 渡した配列を直接変える
+export function boundPending(pending, max = MAX_ROWS) {
+  if (pending.length > max) pending.splice(0, pending.length - max);
+  return pending;
+}
+
 export function installLog(app) {
   const side = document.getElementById('side');
   const title = document.createElement('h2');
@@ -23,6 +30,7 @@ export function installLog(app) {
     name.textContent = app.wardNames.get(ward) ?? ward;
     li.append(time, name, text);
     pending.push(li);
+    boundPending(pending);
   };
 
   let enabled = true;
