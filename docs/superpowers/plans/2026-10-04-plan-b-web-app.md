@@ -22,10 +22,11 @@
 - 面の色の刻みは 0、5、15、25、35cm(暗い青から白への連続色)。札幌市であることをタイトルに明示する。出典(札幌市 CC BY 4.0、国土数値情報、国土地理院)を画面に常時表示する。
 - 雪の粒の描画解像度は `min(devicePixelRatio, 1.5)`。気温が 3℃ を超える区では降らせない。
 - 当日の最新値は気象庁アメダス「札幌」(14163)。取得に失敗したら、出典の表示も含めて出さない。主画面の動作に影響させない。積雪は冬季の観測が再開してから形を確かめる(それまでは気温と風)。
-- 純関数(`web/src/lib/`)は DOM、`Date.now()`、`performance`、タイマーに依存しない(時刻は引数で受ける)。テストは `test/web/*.test.mjs`(`npm test` の glob に入る)。テストでタイマーを残さない(Node 22 でプロセスが終わらない、または失敗する)。Node 22 と 24 の両方で通す。
+- 純関数(`web/src/lib/`)は DOM、`Date.now()`、`performance`、タイマーに依存しない(時刻は引数で受ける)。例外は `lib/jma.js` の `loadLatest` だけ: 取得の関数を引数で差し替えられ、タイムアウトのタイマーは応答のあとに必ず止めるので、テストで残らない(読み取りと同じファイルに置き、Node のテストで取得の失敗の扱いまで確かめるため)。テストは `test/web/*.test.mjs`(`npm test` の glob に入る)。テストでタイマーを残さない(Node 22 でプロセスが終わらない、または失敗する)。Node 22 と 24 の両方で通す。
 - 地図アプリから `scripts/`(Node のスクリプト)を import しない。テストと `scripts/` の側から、地図アプリの純関数を使うのはよい。
 - 公開リポジトリには、特定のブローカー製品の内部情報、ソース、SDK、調査レポート、`.env`、認証情報、試作のコード・データ・スクリーンショットを入れない。発表当日のブローカーは「環境変数と URL で指定する別のブローカー」としてだけ扱い、製品固有のコードの分岐を作らない。スクリーンショットはリポジトリに入れない(`.playwright-mcp/` は gitignore 済み。保存したら、リポジトリの外へ移す)。
 - 開発サーバーとプレビューは `127.0.0.1` だけで待ち受ける。
+- 会場の画面の解像度の下限は 1280 × 720(1920 × 1080 でも確かめる)。
 - コードは MIT。コミットメッセージは日本語。作業は `feat/web-app` で行い、`main` へ直接コミットしない。
 - 優先度(設計書 7.1): 必須 = 面表示、2つの時計、HUD(配信の遅延)、通常の波紋、条件ヒット(強い波紋、ラベル、ヒット欄)。次点 = 通知ログ、ダーク背景の仕上げ、当日の最新値。余裕があれば = 雪の粒、円表示、音。時間が足りなければ、下から削る(Task 16〜18 は、それぞれ単独で外せる)。
 
@@ -35,9 +36,18 @@
 
 1. `amedas/` のトピックに、通知でないメッセージが届く(Mosquitto は匿名で publish できる。JSON でない、`data` がない、別の ID、値が数でない): 例外にせず、そのメッセージだけを無視する。画面は止まらない(Task 3 の「想定外の形は、例外にせず無視する」「値が数でない属性は null」)。
 2. 封筒のないブローカーでは、同じ書き込みの ge3、ge5、live が順不同でほぼ同時に届く(live が先、弱い方が先も): 演出は1回だけ、表示は強い方になる。live は条件の演出を出さない(Task 4 の3つの順序のテスト、Task 8 の `--order weak-first` / `live-first`、Task 11 の画面の確認)。
-3. リハーサルで `setup` をやり直し、前より早い観測時刻から再生する(setup の余分な通知も来る): 時計は戻った時刻に追従し、積雪の増分の履歴は捨て、通知レートは setup の1件で薄まらない(Task 5「時計は最後に受けた live の dateObserved」「時刻が戻ったら履歴を捨てる」、Task 6「setup の余分な通知のあと…」)。
+3. リハーサルで、ページを読み直さずに `setup` をやり直し、同じ範囲か前より早い観測時刻から再生する(setup の余分な通知も来る): 時計は戻った時刻に追従し、積雪の増分の履歴は捨て、通知レートは setup の1件で薄まらない。同じ区と観測時刻の条件ヒットも、もう一度出る(最初の通知から 60 秒より後に届いた通知は、やり直した再生とみなす)。ヒット欄では、古い行を消して新しい行として上に出す(Task 4「同じ書き込みでも、60秒より後に届いたら…」「nextHitOrder…」、Task 5「時計は最後に受けた live の dateObserved」「時刻が戻ったら履歴を捨てる」、Task 6「setup の余分な通知のあと…」)。
 4. `sentAt` や `dateObserved` を持たない通知(別のブローカーや別の書き込み): 件数とレートには入り、遅延には入らない。時計は進めない。HUD は「—」を出す(Task 3、Task 5「dateObserved のない通知は、時計を進めない」、Task 6「sentAt のない通知は…」)。
 5. 会場のネットワークがない、気象庁の JSON の形が変わる(積雪の値が `[null, 5]` のような品質つきで入っている): ウィジェットも出典も出さず、例外も出さない。主画面は影響を受けない(Task 14 の「どの失敗でも null」「品質が 0 でない値と、壊れた値は使わない」と、`?live=off` の確認)。
+
+## 決定事項(2026-10-04、計画のレビューのあとに決めたこと)
+
+- Task 16〜18(余裕があれば)は計画に残す。外すかどうかは、レビューゲート E のあとに決める。決め手は、Task 19 Step 4 の本番機での負荷。
+- CI は Node 22 と 24 の行列で動かす(Task 1 Step 8)。
+- `fake-notify`(Task 8)は、公開リポジトリに入れる(ブローカーなしで、地図アプリと2つの通知の形を確かめる道具として)。
+- 会場の画面の解像度の下限は 1280 × 720(Task 13 Step 3)。
+- 発表当日のブローカーの WebSocket の URL は `?mqtt=` で渡す。`--interval` は、そのブローカーに対して `npm run smoke` で測ってから決める。
+- 当日の最新値の積雪の表示の規則は、冬季の観測の再開後に決める。読み取りは品質が 0 の値だけなので、それまでに積雪のキーに値が入っても、表示には出ない(Task 14)。
 
 ---
 
@@ -148,6 +158,15 @@ npm install -D vite@^8.3.2 maplibre-gl@^6.12.0 eslint@^10.12.0 @eslint/js@^10.0.
 }
 ```
 
+書き換えたら、`package-lock.json` の `packages[""].engines` をそろえるため、もう一度 `npm install` を実行する:
+
+```bash
+npm install
+node -e "console.log(require('./package-lock.json').packages[''].engines)"
+```
+
+期待: `{ node: '>=22.13' }`。
+
 `README.md` の「必要なもの: Docker、Node.js 22 以上、…」の行を「必要なもの: Docker、Node.js 22.13 以上、…」に直す。
 
 - [ ] **Step 2: 失敗するテストを書く(画面の骨組みの約束)**
@@ -165,6 +184,11 @@ const attribution = /<footer id="attribution">([\s\S]*?)<\/footer>/.exec(html)?.
 test('タイトルに札幌市と明示する(設計書 5.3)', () => {
   assert.match(/<title>([^<]*)<\/title>/.exec(html)?.[1] ?? '', /札幌市/);
   assert.match(/<h1>([\s\S]*?)<\/h1>/.exec(html)?.[1] ?? '', /札幌市/);
+});
+
+test('時計の見出しは「観測時刻」と「現在時刻」(設計書 5.2)', () => {
+  const labels = [...html.matchAll(/<div class="clock-label">([^<]*)<\/div>/g)].map((m) => m[1]);
+  assert.deepEqual(labels, ['観測時刻', '現在時刻']);
 });
 
 test('出典を常に表示する(札幌市 CC BY 4.0、国土数値情報、国土地理院)', () => {
@@ -190,7 +214,7 @@ test('Vite: MapLibre の Worker を ES モジュールでビルドに含め、12
 node --test test/web/page.test.mjs
 ```
 
-期待: 4件とも FAIL(`ENOENT: no such file or directory, open 'web/index.html'`)。
+期待: 5件とも FAIL(`ENOENT: no such file or directory, open 'web/index.html'`)。
 
 - [ ] **Step 3: Vite の設定を書く**
 
@@ -245,7 +269,7 @@ export default defineConfig({
 
     <section id="clocks" class="panel" aria-label="時計">
       <div class="clock">
-        <div class="clock-label">観測時刻(データの時刻)</div>
+        <div class="clock-label">観測時刻</div>
         <div class="clock-value observed" data-clock="observed">—</div>
       </div>
       <div class="clock">
@@ -433,7 +457,10 @@ body {
   animation: pulse 1.2s infinite;
 }
 
+/* 切れている、つなぎ直している、拒否された: 橙(会場で気付きやすくする) */
 #hud[data-status='reconnecting'] .dot,
+#hud[data-status='disconnected'] .dot,
+#hud[data-status='error'] .dot,
 #hud[data-status='refused'] .dot {
   background: var(--hit3);
 }
@@ -585,13 +612,13 @@ npm run web:build
 ls dist/web dist/web/assets
 ```
 
-期待: テストは 4件とも PASS。ビルドは `✓ built in …` で終わり、`dist/web/index.html` と `dist/web/assets/index-*.css`、`index-*.js` ができる。
+期待: テストは 5件とも PASS。ビルドは `✓ built in …` で終わり、`dist/web/index.html` と `dist/web/assets/index-*.css`、`index-*.js` ができる。
 
 ```bash
 npm run web:dev
 ```
 
-Playwright MCP で `browser_navigate` → `http://127.0.0.1:5173/`、`browser_snapshot`。期待: 見出し「札幌市10区の積雪」、「観測時刻(データの時刻)」「現在時刻」の見出しと「—」、HUD の行、出典の文(札幌市、国土数値情報、国土地理院)が読める。確認したら止める。
+Playwright MCP で `browser_navigate` → `http://127.0.0.1:5173/`、`browser_snapshot`。期待: 見出し「札幌市10区の積雪」、「観測時刻」「現在時刻」の見出しと「—」、HUD の行、出典の文(札幌市、国土数値情報、国土地理院)が読める。確認したら止める。
 
 `npm run web:dev` と `npm run web:preview` は、止めるまで端末を占有する。エージェントが実行するときは、バックグラウンドで起動し(Bash の `run_in_background`、または末尾に `&`)、確認が終わったら止める(`pkill -f "vite.*web/vite.config.js"`)。以降のタスクの「別の端末で」も同じ扱いにする。Playwright MCP が保存できるのはリポジトリの中だけなので、スクリーンショットや `browser_evaluate` の `filename` は `.playwright-mcp/`(gitignore 済み)に保存し、確認のあとでリポジトリの外へ移す(`browser_evaluate` の `filename` に保存されるのは、戻り値の JSON そのもの。2026-10-04 に確認)。
 
@@ -670,7 +697,7 @@ scripts/replayer/run.mjs
 npm run lint && npm test
 ```
 
-期待: lint はエラーなしで終わる。`npm test` は全件 PASS(既存の 124 件と Step 2 の 4件)。
+期待: lint はエラーなしで終わる。`npm test` は全件 PASS(既存の 124 件と Step 2 の 5件)。
 
 - [ ] **Step 8: CI に lint とビルドを足す**
 
@@ -1248,11 +1275,13 @@ git commit -m "feat: 購読通知の正規化(封筒あり・なし、DateTime �
 
 **Interfaces:**
 - Consumes: `Observation`(Task 3)、`observation(...)`(`test/web/helpers.mjs`)
-- Produces: `createHitDeduper({ maxKeys = 500 }) → { offer(obs) → Decision, size() → number }`。`Decision` は次のどれか:
-  - `{ action: 'show', key, tier: 'ge5' | 'ge3', ward, value }`(初めてのヒット)
+- Produces: `createHitDeduper({ maxKeys = 500, repeatAfterMs = 60000 }) → { offer(obs) → Decision, size() → number }`(時刻は `obs.receivedAt`)。`nextHitOrder(keys, decision, max = 8) → { keys, removed }`(ヒット欄の行の並び。Task 11 が使う)。`Decision` は次のどれか:
+  - `{ action: 'show', key, tier: 'ge5' | 'ge3', ward, value }`(初めてのヒット。または、最初の通知から `repeatAfterMs` より後に届いた同じヒット = setup をやり直した再生)
   - `{ action: 'upgrade', key, tier: 'ge5', ward, value }`(弱い方を出したあとに強い方が届いた)
   - `{ action: 'ignore', reason: 'not-conditional' | 'no-snowfall' | 'stale' | 'weaker-or-same', key? }`
   - `key` は `` `${ward}|${snowfall1h.observedAt}` ``(観測時刻はエポックミリ秒)
+
+決めたこと: キーだけで覚えると、ページを読み直さずに setup をやり直して同じ時間を再生したとき、条件ヒットが二度と出ない(キーは 500 件まで残る)。同じ書き込みの通知は 2 秒以内にそろう(Stellio で約 0.9 秒。申し送り 7節)ので、最初に受けてから 60 秒より後に届いた通知は、やり直した再生とみなして、もう一度出す。タイマーは使わず、通知の受信時刻で判定する。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -1261,7 +1290,7 @@ git commit -m "feat: 購読通知の正規化(封筒あり・なし、DateTime �
 ```js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHitDeduper } from '../../web/src/lib/dedupe.js';
+import { createHitDeduper, nextHitOrder } from '../../web/src/lib/dedupe.js';
 import { observation } from './helpers.mjs';
 
 const T = '2025-11-17T22:00:00Z'; // 北区 07:00 JST、5cm
@@ -1340,6 +1369,38 @@ test('キーは件数の上限で古い順に捨てる(タイマーを使わな�
   assert.equal(d.size(), 2);
   assert.equal(d.offer(at(1)).action, 'show'); // 捨てたキーは、また出る
 });
+
+test('同じ書き込みでも、60秒より後に届いたら(setup をやり直した再生)もう一度出す', () => {
+  const d = createHitDeduper();
+  assert.equal(d.offer(hit('ge5', { receivedAt: 0 })).action, 'show');
+  assert.equal(d.offer(hit('ge3', { receivedAt: 430 })).action, 'ignore');
+  const again = d.offer(hit('ge5', { receivedAt: 120_000 }));
+  assert.equal(again.action, 'show');
+  assert.equal(again.tier, 'ge5');
+  assert.equal(d.offer(hit('ge3', { receivedAt: 120_430 })).action, 'ignore');
+});
+
+test('やり直した再生で弱い方が先に届いても、強い方で置き換える', () => {
+  const d = createHitDeduper();
+  d.offer(hit('ge5', { receivedAt: 0 }));
+  assert.equal(d.offer(hit('ge3', { receivedAt: 90_000 })).action, 'show');
+  assert.equal(d.offer(hit('ge5', { receivedAt: 90_005 })).action, 'upgrade');
+});
+
+test('nextHitOrder: 新しいヒットは先頭、上限を超えた分と、やり直しの古い行は消す', () => {
+  const show = (key) => ({ action: 'show', key });
+  let r = nextHitOrder([], show('a'), 2);
+  assert.deepEqual(r, { keys: ['a'], removed: [] });
+  r = nextHitOrder(['a'], show('b'), 2);
+  assert.deepEqual(r, { keys: ['b', 'a'], removed: [] });
+  r = nextHitOrder(['b', 'a'], show('c'), 2);
+  assert.deepEqual(r, { keys: ['c', 'b'], removed: ['a'] });
+  // やり直した再生: 同じキーの古い行を消して、先頭に新しい行を出す
+  r = nextHitOrder(['c', 'b'], show('b'), 2);
+  assert.deepEqual(r, { keys: ['b', 'c'], removed: ['b'] });
+  // upgrade は並びを変えない
+  assert.deepEqual(nextHitOrder(['b', 'c'], { action: 'upgrade', key: 'c' }, 2), { keys: ['b', 'c'], removed: [] });
+});
 ```
 
 - [ ] **Step 2: テストを実行して失敗を確認する**
@@ -1355,7 +1416,7 @@ node --test test/web/dedupe.test.mjs
 `web/src/lib/dedupe.js`:
 
 ```js
-// 条件ヒットの重複排除(純関数。タイマーを使わない)。
+// 条件ヒットの重複排除(純関数。タイマーを使わない。時刻は通知の receivedAt を使う)。
 //
 // ge3 と ge5 は別の購読なので、同じ書き込みの通知が別々に、順不同で届く
 // (Stellio では ge5 → ge3 → live の順に約 430ms ずつ空いて届く。封筒のないブローカーでは、ほぼ同時で順序は決まらない)。
@@ -1364,12 +1425,14 @@ node --test test/web/dedupe.test.mjs
 // - 強い購読(ge5)があとから届いたら、弱い方の演出を置き換える('upgrade')
 // - 弱い購読や同じ購読があとから届いたら、無視する('ignore')
 // - live の通知は、条件の演出を出さない('ignore')。live は面の更新だけに使う
+// - 同じ識別子でも、最初の通知から repeatAfterMs より後に届いたら、setup をやり直した再生とみなして、もう一度出す('show')。
+//   同じ書き込みの通知は、2秒以内にそろう(Stellio で約 0.9 秒)。
 // 演出は届いた順に出す(観測時刻に合わせて遅らせない)。
 
 const RANK = Object.freeze({ ge3: 1, ge5: 2 });
 
-export function createHitDeduper({ maxKeys = 500 } = {}) {
-  const seen = new Map(); // key -> 表示中の強さ('ge3' | 'ge5')。古いキーから捨てる(件数で上限)
+export function createHitDeduper({ maxKeys = 500, repeatAfterMs = 60_000 } = {}) {
+  const seen = new Map(); // key -> { tier: 表示中の強さ, at: 最初に受けた時刻 }。古いキーから捨てる(件数で上限)
   return {
     offer(obs) {
       if (!(obs.kind in RANK)) return { action: 'ignore', reason: 'not-conditional' };
@@ -1379,19 +1442,31 @@ export function createHitDeduper({ maxKeys = 500 } = {}) {
       if (obs.dateObserved !== null && s.observedAt !== obs.dateObserved) return { action: 'ignore', reason: 'stale' };
       const key = `${obs.ward}|${s.observedAt}`;
       const prev = seen.get(key);
-      if (prev === undefined) {
-        seen.set(key, obs.kind);
+      if (prev === undefined || obs.receivedAt - prev.at > repeatAfterMs) {
+        seen.delete(key);
+        seen.set(key, { tier: obs.kind, at: obs.receivedAt });
         while (seen.size > maxKeys) seen.delete(seen.keys().next().value);
         return { action: 'show', key, tier: obs.kind, ward: obs.ward, value: s.value };
       }
-      if (RANK[obs.kind] > RANK[prev]) {
-        seen.set(key, obs.kind);
+      if (RANK[obs.kind] > RANK[prev.tier]) {
+        prev.tier = obs.kind;
         return { action: 'upgrade', key, tier: obs.kind, ward: obs.ward, value: s.value };
       }
       return { action: 'ignore', key, reason: 'weaker-or-same' };
     },
     size: () => seen.size,
   };
+}
+
+// ヒット欄の行の並び(新しいものが先頭、最大 max 件)。keys: いまの並び(キーの配列)。
+// show: 同じキーの古い行があれば消して、先頭に出す(setup をやり直した再生)。upgrade: 並びは変えない(行を書き換える)。
+// 戻り値: { keys: 新しい並び, removed: 消すキーの配列 }
+export function nextHitOrder(keys, decision, max = 8) {
+  if (decision.action !== 'show') return { keys, removed: [] };
+  const rest = keys.filter((k) => k !== decision.key);
+  const next = [decision.key, ...rest];
+  const removed = [...(rest.length < keys.length ? [decision.key] : []), ...next.slice(max)];
+  return { keys: next.slice(0, max), removed };
 }
 ```
 
@@ -1401,7 +1476,7 @@ export function createHitDeduper({ maxKeys = 500 } = {}) {
 node --test test/web/dedupe.test.mjs && npx -y node@22 --test test/web/dedupe.test.mjs && npm run lint
 ```
 
-期待: どちらの Node でも 8件とも PASS。
+期待: どちらの Node でも 11件とも PASS。
 
 - [ ] **Step 5: コミット**
 
@@ -1647,6 +1722,8 @@ git commit -m "feat: 区ごとの最新値と観測時刻の時計(dateObserved)
 - Produces: `createStats({ windowMs = 60000, maxLatencySamples = 2000 }) → { recordLive(obs), recordConditional(obs), snapshot(now) → Snapshot }`、`percentile(sorted, p)`
   - `Snapshot = { total, ratePerMin, latency: { last, count, median, p95, max }, cond: { ge5, ge3 } }`(遅延はミリ秒。値がなければ null)
   - `cond` は重複排除の前の件数(`npm run smoke` の件数、設計書 4.2 の「5件、16件」と比べられる)
+
+注記: setup の余分な通知から 60 秒以内に再生を始めると、その1件が窓に残り、最初の約1分だけレートがわずかに低めに出る(影響が小さいため、このままにする)。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -2911,14 +2988,64 @@ git commit -m "feat: MQTT の購読通知で区の面と時計、HUD(通知レ�
 ### Task 11: 波紋と条件ヒット(`ripples.js`、`hits.js`、`hit-effects.js`)
 
 **Files:**
-- Create: `web/src/effects/ripples.js`、`web/src/panels/hits.js`、`web/src/effects/hit-effects.js`
+- Create: `web/src/lib/pulse.js`、`web/src/effects/ripples.js`、`web/src/panels/hits.js`、`web/src/effects/hit-effects.js`
 - Modify: `web/src/main.js`(2行)、`web/src/style.css`(節を足す)
+- Test: `test/web/pulse.test.mjs`
 
 **Interfaces:**
-- Consumes: `app`(Task 10)、`hit(decision, obs)` と `live(obs, state)` のイベント(Task 9、10)、`app.mapLayer.flashHit`(Task 9)、`formatHourMinute`、`formatTimeOfDay`(Task 2)
-- Produces: `createRipples(layer) → { setEnabled(boolean), pulse(x, y), hit(key, x, y, tier, text) }`、`createHitList(root, { max = 8 }) → { render(decision, wardName, obs) }`、`installHitEffects(app)`(`app.ripples` を設定する。Task 12 の「波紋」の切り替えが使う)
+- Consumes: `app`(Task 10)、`hit(decision, obs)` と `live(obs, state)` のイベント(Task 9、10)、`app.mapLayer.flashHit`(Task 9)、`nextHitOrder`(Task 4)、`formatHourMinute`、`formatTimeOfDay`(Task 2)
+- Produces: `canPulse({ hidden, active, max = MAX_LIVE_RINGS }) → boolean`、`MAX_LIVE_RINGS = 40`、`createRipples(layer) → { setEnabled(boolean), pulse(x, y), hit(key, x, y, tier, text) }`、`createHitList(root, { max = 8 }) → { render(decision, wardName, obs) }`、`installHitEffects(app)`(`app.ripples` を設定する。Task 12 の「波紋」の切り替えが使う)
 
-- [ ] **Step 1: 波紋とヒットの演出を書く**
+- [ ] **Step 1: 失敗するテストを書く(隠れたタブで波紋をためない)**
+
+隠れたタブでは CSS アニメーションが止まり、`animationend` が来ないため、live の通知ごとに波紋の要素がたまる(約 100 件/分)。隠れているときは出さず、同時に出ている数にも上限を付ける。
+
+`test/web/pulse.test.mjs`:
+
+```js
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { canPulse, MAX_LIVE_RINGS } from '../../web/src/lib/pulse.js';
+
+test('隠れたタブでは、通常の波紋を出さない', () => {
+  assert.equal(canPulse({ hidden: true, active: 0 }), false);
+  assert.equal(canPulse({ hidden: false, active: 0 }), true);
+});
+
+test('同時に出ている波紋が上限に達したら、出さない', () => {
+  assert.equal(MAX_LIVE_RINGS, 40);
+  assert.equal(canPulse({ hidden: false, active: 39 }), true);
+  assert.equal(canPulse({ hidden: false, active: 40 }), false);
+  assert.equal(canPulse({ hidden: false, active: 3, max: 3 }), false);
+});
+```
+
+```bash
+node --test test/web/pulse.test.mjs
+```
+
+期待: FAIL(`Cannot find module '…/web/src/lib/pulse.js'`)。
+
+`web/src/lib/pulse.js`:
+
+```js
+// 通常の波紋を出してよいか(純関数)。
+// 隠れたタブでは CSS アニメーションが止まり、animationend が来ないため、波紋の要素がたまり続ける(約100件/分)。
+// 隠れているときは出さず、同時に出ている数にも上限を付ける。
+export const MAX_LIVE_RINGS = 40;
+
+export function canPulse({ hidden, active, max = MAX_LIVE_RINGS }) {
+  return !hidden && active < max;
+}
+```
+
+```bash
+node --test test/web/pulse.test.mjs && npx -y node@22 --test test/web/pulse.test.mjs
+```
+
+期待: どちらの Node でも 2件とも PASS。
+
+- [ ] **Step 2: 波紋とヒットの演出を書く**
 
 `web/src/effects/ripples.js`:
 
@@ -2927,9 +3054,13 @@ git commit -m "feat: MQTT の購読通知で区の面と時計、HUD(通知レ�
 // - 通常の更新: 細いリング1本(控えめ)
 // - 条件ヒット: 太い発光リング2本 + ラベル(橙 = 3cm 以上、赤 = 5cm 以上)
 // - 同じ書き込みで強い購読の通知があとから届いたら、弱い方の演出を消して置き換える
+// - 隠れたタブでは通常の波紋を出さない(アニメーションが止まり、要素がたまるため。lib/pulse.js)
+import { canPulse } from '../lib/pulse.js';
+
 export function createRipples(layer) {
   const active = new Map(); // hit.key -> 要素の配列
   let enabled = true;
+  let liveRings = 0;
 
   function place(el, x, y) {
     el.style.left = `${Math.round(x)}px`;
@@ -2951,7 +3082,9 @@ export function createRipples(layer) {
     },
     // 通常の更新(live の通知)
     pulse(x, y) {
-      if (enabled) ring(x, y, 'ring ring-live');
+      if (!enabled || !canPulse({ hidden: document.hidden, active: liveRings })) return;
+      liveRings++;
+      ring(x, y, 'ring ring-live').addEventListener('animationend', () => liveRings--, { once: true });
     },
     // 条件ヒット(トグルに関係なく出す。必須の演出)
     hit(key, x, y, tier, text) {
@@ -2978,27 +3111,31 @@ export function createRipples(layer) {
 `web/src/panels/hits.js`:
 
 ```js
-// 条件ヒット欄(主役)。新しいものを上に、最大 max 件。
+// 条件ヒット欄(主役)。新しいものを上に、最大 max 件(並びは lib/dedupe.js の nextHitOrder)。
 // 強い購読(ge5)の通知があとから届いたら、同じ行を書き換える(行を増やさない)。
+// setup をやり直した再生で同じヒットがまた届いたら、古い行を消して、新しい行として上に出す。
 import { formatHourMinute, formatTimeOfDay } from '../lib/format.js';
+import { nextHitOrder } from '../lib/dedupe.js';
 
 const TIER_TEXT = Object.freeze({ ge5: '5cm 以上', ge3: '3cm 以上' });
 
 export function createHitList(root, { max = 8 } = {}) {
   const rows = new Map(); // hit.key -> li
+  let keys = [];
   return {
     // hit: dedupe の戻り値(action が show か upgrade)、wardName: 区名、obs: その通知の Observation
     render(hit, wardName, obs) {
+      const order = nextHitOrder(keys, hit, max);
+      keys = order.keys;
+      for (const k of order.removed) {
+        rows.get(k)?.remove();
+        rows.delete(k);
+      }
       let li = rows.get(hit.key);
       if (!li) {
         li = document.createElement('li');
         root.prepend(li);
         rows.set(hit.key, li);
-        while (root.children.length > max) {
-          const last = root.lastElementChild;
-          for (const [k, v] of rows) if (v === last) rows.delete(k);
-          last.remove();
-        }
       }
       li.className = hit.tier;
       const time = document.createElement('time');
@@ -3040,7 +3177,7 @@ export function installHitEffects(app) {
 }
 ```
 
-- [ ] **Step 2: スタイルを足す**
+- [ ] **Step 3: スタイルを足す**
 
 `web/src/style.css` の末尾に足す:
 
@@ -3144,7 +3281,7 @@ export function installHitEffects(app) {
 }
 ```
 
-- [ ] **Step 3: main.js に組み込む**
+- [ ] **Step 4: main.js に組み込む**
 
 `web/src/main.js` の `import { createHud } from './panels/hud.js';` の次の行に足す:
 
@@ -3158,7 +3295,7 @@ import { installHitEffects } from './effects/hit-effects.js';
   installHitEffects(app);
 ```
 
-- [ ] **Step 4: 3つの順序で、1ヒット1演出になることを確かめる**
+- [ ] **Step 5: 3つの順序で、1ヒット1演出になることを確かめる**
 
 ```bash
 npm run lint && npm test && npm run web:build && npm run web:preview
@@ -3184,16 +3321,18 @@ npm run fake-notify -- --from 2025-11-18T13:50:00+09:00 --to 2025-11-18T15:10:00
 
 期待: ヒット欄に 14:00 の4件(厚別区 3、北区 3、東区 5、手稲区 5)と 15:00 の5件(中央区 3、東区 3、白石区 3、厚別区 4、手稲区 5)が、新しい順に最大8行。5cm の行は赤、3〜4cm の行は橙。HUD の条件付き購読は「5cm 以上 3 ・ 3cm 以上 9」。live の通知では、観測点に細い波紋が出て、条件の演出(太い波紋とラベル)は出ない。`browser_take_screenshot` を見て、ヒットの区の外周が橙か赤で一時的に強調されることを確かめる。
 
-- [ ] **Step 5: コミット**
+やり直した再生: ページを読み直さずに、60 秒以上待ってから、最初の `strong-first` のコマンド(北区 07:00)をもう一度流す。期待: 赤いラベル「北区 1時間降雪量 5cm」がもう一度出て、ヒット欄の北区 07:00 の行は1行のまま、いちばん上に来る(受信時刻が新しくなる)。
+
+- [ ] **Step 6: コミット**
 
 ```bash
-git add web/src/effects/ripples.js web/src/panels/hits.js web/src/effects/hit-effects.js web/src/main.js web/src/style.css
+git add web/src/lib/pulse.js test/web/pulse.test.mjs web/src/effects/ripples.js web/src/panels/hits.js web/src/effects/hit-effects.js web/src/main.js web/src/style.css
 git commit -m "feat: 波紋と、条件ヒットの強い波紋・ラベル・ヒット欄を追加"
 ```
 
 ### レビューゲート D(工程3の必須)
 
-- [ ] **Step 6:** サブエージェントに、ここまでのレビューを依頼する(`git diff main...HEAD`、設計書の 5章と 7.1、申し送り、この計画の Global Constraints と Review Focus を渡す)。観点: (1) 通知の2つの形と、想定外のメッセージで止まらないこと、(2) 重複排除の3つの順序と、live で条件の演出が出ないこと、(3) 観測時刻が `dateObserved` から来ていること、`snowfall1h` の正時の判定、(4) HUD の遅延の定義が smoke と同じであること、(5) 外部への通信がないこと(ビルドした `dist/web/` を `grep -rE "https?://" dist/web/index.html` で確かめ、Playwright の `browser_network_requests` で、気象庁以外の外部への要求がないこと)、(6) 公開されて困るものが入っていないこと。指摘を直してから、次点のタスクへ進む。ここで発表のデモとして成立する(次点・余裕の演出がなくても使える)。
+- [ ] **Step 7:** サブエージェントに、ここまでのレビューを依頼する(`git diff main...HEAD`、設計書の 5章と 7.1、申し送り、この計画の Global Constraints と Review Focus を渡す)。観点: (1) 通知の2つの形と、想定外のメッセージで止まらないこと、(2) 重複排除の3つの順序と、live で条件の演出が出ないこと、(3) 観測時刻が `dateObserved` から来ていること、`snowfall1h` の正時の判定、(4) HUD の遅延の定義が smoke と同じであること、(5) 外部への通信がないこと(ビルドした `dist/web/` を `grep -rE "https?://" dist/web/index.html` で確かめ、Playwright の `browser_network_requests` で、気象庁以外の外部への要求がないこと)、(6) 公開されて困るものが入っていないこと(特定のブローカー製品の名前や既定のポート番号を含めて)。指摘を直してから、次点のタスクへ進む。ここで発表のデモとして成立する(次点・余裕の演出がなくても使える)。
 
 ---
 
@@ -3437,11 +3576,12 @@ git commit -m "feat: 演出の切り替えと、通知ログを追加"
 区の境界の座標を小数4桁に丸めたため、隣の区との間に細いすき間(背景の色の線)が出る可能性がある(申し送り 10節)。境界線のレイヤー(`ward-line`、1px、`#3d4f70`)が、すき間を覆うことを期待しているが、画面で確かめる。あわせて、発表の画面の解像度で、パネルと地図の重なり、ラベルの読みやすさを確かめる。
 
 **Files:**
+- Modify: `web/src/style.css`(1280 × 720 までの節を足す)、`web/src/main.js`(余白の2か所)、`web/src/labels.js`(区ごとのずらし)
 - Modify(判定による): `web/src/map-layer.js`(すき間を埋めるレイヤー)
 
 **Interfaces:**
 - Consumes: Task 9〜12 の画面
-- Produces: 判定の記録(コミットのメッセージ、または PR の本文に書く)。すき間が見えた場合は、`ward-fill` と `ward-line` の間に `ward-seam` レイヤー
+- Produces: 判定の記録(コミットのメッセージに書く)。すき間が見えた場合は、`ward-fill` と `ward-line` の間に `ward-seam` レイヤー。会場の解像度の下限(1280 × 720)で、ラベルがパネルに隠れず、互いに重ならない画面
 
 - [ ] **Step 1: すき間を確かめる**
 
@@ -3475,27 +3615,154 @@ npm run fake-notify -- --from 2025-11-18T15:50:00+09:00 --to 2025-11-18T16:00:00
 
 Step 1 の 1 をもう一度撮り、線や点が消えたことを確かめる。
 
-- [ ] **Step 3: 発表の解像度で確かめる**
+- [ ] **Step 3: 1280 × 720(会場の解像度の下限)に合わせる**
 
-`browser_resize` を 1920 × 1080、1280 × 720 の順に変え、それぞれ `browser_navigate` → `http://127.0.0.1:4173/` のあと、ピーク時(`npm run fake-notify -- --from 2025-11-18T14:50:00+09:00 --to 2025-11-18T15:10:00+09:00 --interval 1500 --gap 100`)を流して `browser_take_screenshot`(`filename: .playwright-mcp/res-<幅>.png`)。
+Task 12 までの画面を 1280 × 720 で開くと、左右のパネルが余白を取り(`padding()` が左に約 448px、右に約 512px)、地図の幅が約 320px しかなく、南区、豊平区、白石区のラベルが重なる(計画のレビューで確認)。次の2つを固定の手順として入れる。
 
-確かめること(すべての解像度で):
-- 10区の観測点とラベルが、左の時計・HUD と右の欄に隠れていない(南区の南側は切れてよい。設計書 5.5)。
-- 北区(35cm 近く、最も明るい色)の上でも、ラベルの白い文字が読める。
-- タイトル「札幌市10区の積雪」と、下端の出典が、ほかの要素に隠れていない。
-- 1280 × 720 で出典の文が切れて「…」になる場合は、`#attribution` の `white-space: nowrap;` を消して2行にする(`web/src/style.css`)。
+`web/src/style.css` の末尾に足す(幅 1400px 以下で、パネルを細くし、文字を少し小さくする):
 
-確認したら、スクリーンショットをリポジトリの外へ移す。
+```css
+/* ---- 1280 × 720 まで(Task 13) ---- */
+/* 会場の解像度の下限は 1280 × 720。パネルを細くして、地図の幅を確保する */
+@media (max-width: 1400px) {
+  #side {
+    width: 300px;
+  }
 
-- [ ] **Step 4: コミット(変更があった場合)**
+  #clocks,
+  #hud {
+    min-width: 260px;
+  }
+
+  .clock-value.observed {
+    font-size: 22px;
+  }
+
+  .ward-label {
+    font-size: 11px;
+  }
+}
+```
+
+`web/src/main.js` の `padding` の中の2か所の `+ 90,` を `+ 60,` に変える(左の HUD と右の欄からの余白)。変えたあとの2行:
+
+```js
+    const left = Math.min(document.getElementById('hud').getBoundingClientRect().right + 60, w * 0.35);
+    const right = Math.min(w - document.getElementById('side').getBoundingClientRect().left + 60, w * 0.4);
+```
+
+余白は、観測点の点の位置にかかる。ラベルは点を中心に左右へ約 35〜45px 広がるため、+24 では端の区(手稲区、厚別区)のラベルの半分がパネルに隠れた(2026-10-04 に 1280 × 720 で確認)。+60 で、隠れず、地図の幅も足りた。
+
+この2つを入れても、1280 × 720 では南区と豊平区のラベルが 1px 重なった(観測点が近い)。`web/src/labels.js` に、区ごとのずらしを足す。`export function createWardLabels(` の直前に足す:
+
+```js
+// 1280 × 720 で重なる区だけ、ラベルをずらす(px。x は負が左、y は負が上)。
+// 2026-10-04 の確認では、南区と豊平区のラベルが 1px 重なった(観測点が近い)。
+const LABEL_OFFSET = Object.freeze({ minami: { x: -8, y: 0 } });
+```
+
+`layout` の中の1行:
+
+```js
+        if (p) el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y + 8)}px) translateX(-50%)`;
+```
+
+を、次の2行に置き換える:
+
+```js
+        const d = LABEL_OFFSET[ward] ?? { x: 0, y: 0 };
+        if (p) el.style.transform = `translate(${Math.round(p.x + d.x)}px, ${Math.round(p.y + 8 + d.y)}px) translateX(-50%)`;
+```
+
+変えたあとの `web/src/labels.js` の全体:
+
+```js
+// 区のラベル(区名、積雪深、気温)。地図の上の DOM で描く(MapLibre の文字は外部のグリフが要るため使わない)。
+// 気温が欠測(または1時間以上古い)のときは「—」にして、色を付けない。
+import { formatSnowDepth, formatTemperature, temperatureClass } from './lib/format.js';
+
+// 1280 × 720 で重なる区だけ、ラベルをずらす(px。x は負が左、y は負が上)。
+// 2026-10-04 の確認では、南区と豊平区のラベルが 1px 重なった(観測点が近い)。
+const LABEL_OFFSET = Object.freeze({ minami: { x: -8, y: 0 } });
+
+export function createWardLabels(layer, stations, wardNames) {
+  const labels = new Map();
+  for (const s of stations) {
+    const el = document.createElement('div');
+    el.className = 'ward-label';
+    el.dataset.ward = s.ward;
+    const name = document.createElement('b');
+    name.textContent = wardNames.get(s.ward) ?? s.ward;
+    const snow = document.createElement('span');
+    snow.className = 'snow';
+    snow.textContent = formatSnowDepth(null);
+    const temp = document.createElement('span');
+    temp.className = 'temp t-none';
+    temp.textContent = formatTemperature(null);
+    el.append(name, snow, temp);
+    layer.append(el);
+    labels.set(s.ward, { el, snow, temp });
+  }
+
+  return {
+    // positions: Map<ward, {x, y}>(観測点の画面座標)。ラベルは観測点の少し下に置く
+    layout(positions) {
+      for (const [ward, { el }] of labels) {
+        const p = positions.get(ward);
+        const d = LABEL_OFFSET[ward] ?? { x: 0, y: 0 };
+        if (p) el.style.transform = `translate(${Math.round(p.x + d.x)}px, ${Math.round(p.y + 8 + d.y)}px) translateX(-50%)`;
+      }
+    },
+    update(ward, state) {
+      const l = labels.get(ward);
+      if (!l) return;
+      l.snow.textContent = formatSnowDepth(state.snowHeight);
+      l.temp.textContent = formatTemperature(state.temperature);
+      l.temp.className = `temp t-${temperatureClass(state.temperature)}`;
+    },
+  };
+}
+```
+
+- [ ] **Step 4: 1280 × 720 と 1920 × 1080 で確かめる**
+
+```bash
+npm run lint && npm run web:build && npm run web:preview
+```
+
+解像度ごとに(`browser_resize` を 1280 × 720、1920 × 1080 の順に)、`browser_navigate` → `http://127.0.0.1:4173/?live=off`、別の端末で `npm run fake-notify -- --from 2025-11-18T15:50:00+09:00 --to 2025-11-18T16:00:00+09:00 --interval 500 --gap 0`(16:00 は北区 35cm、西区のヒットあり)、`browser_take_screenshot`(`filename: .playwright-mcp/res-<幅>.png`)と、次の `browser_evaluate`:
+
+```js
+() => {
+  const r = (el) => el.getBoundingClientRect();
+  const labels = [...document.querySelectorAll('.ward-label')].map((el) => ({ ward: el.dataset.ward, ...r(el).toJSON() }));
+  const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  const pairs = [];
+  for (let i = 0; i < labels.length; i++) for (let j = i + 1; j < labels.length; j++) if (overlap(labels[i], labels[j])) pairs.push(`${labels[i].ward}-${labels[j].ward}`);
+  const panels = ['clocks', 'hud', 'side', 'controls', 'legend'].map((id) => r(document.getElementById(id)));
+  const hidden = labels.filter((l) => panels.some((p) => overlap(l, p))).map((l) => l.ward);
+  const attr = document.getElementById('attribution');
+  return { pairs, hidden, attributionCut: attr.scrollWidth > attr.clientWidth, titleGap: r(document.getElementById('side')).left - r(document.getElementById('title')).right };
+}
+```
+
+期待(どちらの解像度でも): `pairs` と `hidden` が空(ラベルが重ならず、パネルに隠れない。南区の南側の面が切れるのはよい。設計書 5.5)、`attributionCut` が false(出典が切れない)、`titleGap` が 8 以上(タイトルの右端が右の欄に接しない)。スクリーンショットでは、北区(35cm、最も明るい色)の上のラベルの白い文字が読める。2026-10-04 の確認(Step 3 のすべてを入れた状態)では、1280 × 720 で `pairs` と `hidden` は空、`titleGap` は約 88px、出典は1行に収まった。1920 × 1080 でも `pairs` と `hidden` は空、`titleGap` は約 308px だった。
+
+外れた場合の直し方:
+- `pairs` が空でない → Step 3 の `LABEL_OFFSET` に、重なった組の一方の区を足す。横に数 px ずらして離れるなら `x`、離れなければ、下側の区を `y` で下へ(1行の高さ 約 34px を目安に)。足したら、この Step をやり直す。
+
+- `titleGap` が 8 より小さい → Step 3 の `@media` の中に `#title small { display: none; }` を足す(副題を消して、タイトルを短くする)。
+- `attributionCut` が true → `#attribution` の `white-space: nowrap;` を消して2行にする。
+
+確認したら、スクリーンショットをリポジトリの外へ移す(`mv .playwright-mcp/res-*.png ~/sapporo-web-shots/`)。
+
+- [ ] **Step 5: コミット**
 
 ```bash
 npm run lint && npm test && npm run web:build
-git add web/src/map-layer.js web/src/style.css
-git commit -m "fix: 区の境界のすき間と、発表の解像度での表示を確認して直す(判定: <Step 1 の結果を1行で>)"
+git add web/src/style.css web/src/main.js web/src/map-layer.js web/src/labels.js
+git commit -m "fix: 1280×720 までの画面に合わせ、区の境界のすき間を確認する(すき間の判定: <Step 1 の結果を1行で>)"
 ```
-
-変更がなかった場合はコミットせず、判定を Task 15 の README の作業と一緒に、PR の本文に書く。
 
 ### Task 14: 当日の最新値(`jma.js`、`live-widget.js`)(工程4)
 
@@ -3824,7 +4091,7 @@ git commit -m "feat: 当日の最新値(気象庁アメダス「札幌」の気�
 
 **Interfaces:**
 - Consumes: Task 1〜14 のコマンドと URL パラメーター
-- Produces: README の「地図アプリ」の節。冒頭の「地図アプリは作業中です。」を消す
+- Produces: README の「地図アプリ」の節と「仕組み」の節(設計書 6.4 の4番目)。冒頭の「地図アプリは作業中です。」を消す
 
 - [ ] **Step 1: 冒頭を直す**
 
@@ -3872,20 +4139,62 @@ npm run fake-notify -- --bare --order weak-first    # 封筒のない形、弱�
 画面の確認で撮ったスクリーンショットは、リポジトリに入れないでください(公開リポジトリのため)。
 ````
 
-- [ ] **Step 3: 出典の節を確かめる**
+- [ ] **Step 3: 「仕組み」の節を足す**
+
+`## データの出典` の直前に、次を入れる(設計書 6.4 の4番目。計画A の README にはまだない):
+
+````markdown
+## 仕組み
+
+```
+札幌市 CKAN(CSV、CC BY 4.0)
+   │ npm run build:data(作成済みのものを data/ にコミット済み)
+   ▼
+data/(区ごとの観測値、観測地点、区の境界)
+   │ npm run setup: 10区のエンティティを作り、購読を3本登録する
+   │ npm run replay: 時計に合わせて、10区を1件ずつ順に PATCH する(区の間も並列にしない)
+   ▼
+NGSI-LD ブローカー
+   │ 購読通知(MQTT、QoS 0)
+   ▼
+Mosquitto ── WebSocket(ws://127.0.0.1:9001)──► 地図アプリ(web/)
+```
+
+エンティティは区ごとに1件です(型 `WeatherObserved`、ID `urn:ngsi-ld:WeatherObserved:sapporo-<区>`)。
+
+| 属性 | 型 | 内容 |
+|---|---|---|
+| `temperature`、`snowHeight`、`precipitation`、`windSpeed`、`windDirection` | Property(`unitCode` と `observedAt` つき) | 10分ごとの観測値。欠測の行では書きません |
+| `snowfall1h` | Property(同上) | 前1時間の降雪量。正時の行にだけ書きます |
+| `dateObserved` | Property(DateTime) | その書き込みの観測時刻。書き込みのたびに付けます。地図アプリの「観測時刻」はこれです |
+| `sentAt` | Property(DateTime) | 書き込んだ時刻(ミリ秒まで)。書き込みのたびに付けます。地図アプリは、受信時刻との差を配信の遅延として表示します |
+| `name`、`location` | Property、GeoProperty | 区名と、観測地点(各区の土木センター)の座標 |
+
+購読は3本です(対象は ID が `urn:ngsi-ld:WeatherObserved:sapporo-` で始まるエンティティ)。
+
+| トピック | `q` | `watchedAttributes` | 届く通知 |
+|---|---|---|---|
+| `amedas/live` | なし | `["sentAt"]` | 書き込みごとに1件(エンティティの全属性) |
+| `amedas/cond/snowfall1h_ge5` | `snowfall1h>=5` | `["snowfall1h"]` | 正時に、降雪量が 5cm 以上だった区 |
+| `amedas/cond/snowfall1h_ge3` | `snowfall1h>=3` | `["snowfall1h"]` | 正時に、降雪量が 3cm 以上だった区 |
+
+条件付きの購読は、条件が成り立っている間、監視する属性が書かれるたびに通知されます。`snowfall1h` を正時にだけ書くことで、「その1時間に条件を満たした」通知になります。
+````
+
+- [ ] **Step 4: 出典の節を確かめる**
 
 `data/ATTRIBUTION.md` の「当日の最新の気象値(気象庁)」の節が、Task 14 の表示(出典と、加工した旨)と食い違わないことを読んで確かめる(変更は不要のはず)。
 
-- [ ] **Step 4: コミット**
+- [ ] **Step 5: コミット**
 
 ```bash
 git add README.md
-git commit -m "docs: README に地図アプリの節(起動、URL パラメーター、画面の見方)を追加"
+git commit -m "docs: README に地図アプリの節と、仕組みの節(データの流れ、モデル、購読)を追加"
 ```
 
 ### レビューゲート E(次点)
 
-- [ ] **Step 5:** サブエージェントに、Task 12〜15 のレビューを依頼する(`git diff <ゲート D のコミット>..HEAD`、設計書 5.2〜5.4、6.4、7.1)。観点: (1) 当日の最新値が失敗しても主画面に影響せず、出典も出ないこと、(2) 気象庁の取得以外に外部への通信がないこと、(3) 出典が常に見えること、(4) README の手順が、きれいな環境(`git clone` → `npm ci` → `npm run web:build`)で通ること、(5) 公開されて困るものが入っていないこと。
+- [ ] **Step 6:** サブエージェントに、Task 12〜15 のレビューを依頼する(`git diff <ゲート D のコミット>..HEAD`、設計書 5.2〜5.4、6.4、7.1)。観点: (1) 当日の最新値が失敗しても主画面に影響せず、出典も出ないこと、(2) 気象庁の取得以外に外部への通信がないこと、(3) 出典が常に見えること、(4) README の手順が、きれいな環境(`git clone` → `npm ci` → `npm run web:build`)で通ること、(5) 公開されて困るものが入っていないこと。
 
 ---
 
@@ -4144,7 +4453,7 @@ npm run lint && npm test && npm run web:build && npm run web:preview
 
 `browser_navigate` → `http://127.0.0.1:4173/?debug`、別の端末で `npm run fake-notify -- --from 2025-11-18T13:00:00+09:00 --to 2025-11-18T16:10:00+09:00 --interval 800 --gap 100`。10秒後に `browser_evaluate` → `() => ({ n: window.__sapporo.app.snow.count(), w: document.getElementById('snow').width, dpr: devicePixelRatio })`。
 
-期待: `n` が 0 より大きく 3000 以下。`w` は `innerWidth × min(dpr, 1.5)`。降雪量の多い区(東区、手稲区、北区)の上で粒が多い。切り替えの「雪の粒」を外すと、粒が消える。Retina の実機での負荷は Task 19 で測る。
+期待: `n` が 0 より大きく 3000 以下。`w` は `innerWidth × min(dpr, 1.5)`。粒は観測点のまわり(左右に約 ±165px)から落ちるため、区の境界の外や、隣の区にもはみ出す(区の形で切り抜いてはいない)。見た目が気になる場合は、`snow.js` の横の広がり(`* 110`)を小さくする調整で対応する(区の形での切り抜きは、負荷が増えるので行わない)。降雪量の多い区(東区、手稲区、北区)の上で粒が多い。切り替えの「雪の粒」を外すと、粒が消える。Retina の実機での負荷は Task 19 で測る。
 
 - [ ] **Step 5: コミット**
 
@@ -4419,7 +4728,7 @@ npm run replay -- --log ~/sapporo-e2e/replay.jsonl
 
 | 時点 | 画面 |
 |---|---|
-| `setup` の直後 | 清田区だけ色とラベルが入り、観測時刻が「2025-11-18 02:40 JST」(setup の余分な通知。申し送り 6節) |
+| `setup` の直後 | 新規に起動した Stellio での最初の `setup` では、通知は届かず、画面は変わらない(10区とも灰色、観測時刻「—」)。`setup` をやり直した場合だけ、清田区だけ色とラベルが入り、観測時刻が「2025-11-18 02:40 JST」になる(setup の余分な通知。申し送り 6節) |
 | 再生の開始から | 観測時刻が 6 秒ごとに 10 分進む。区の書き込みは 0.6 秒ずつずれて届き、観測点に細い波紋が順に出る。通知レートは約 100 件/分、遅延の中央値は約 400ms(申し送り 8節: 中央値 0.38〜0.39 秒、p95 0.54〜0.81 秒、最大 約 2 秒) |
 | 約 2分30秒(07:00) | 北区 5cm(赤のラベル1つ、ヒット欄に赤の1行) |
 | 約 3分(08:00)、約 3分42秒(09:00) | 北区 4cm(橙)、北区 5cm(赤) |
@@ -4443,7 +4752,7 @@ mv .playwright-mcp/received.json .playwright-mcp/e2e-*.png ~/sapporo-e2e/
 node scripts/smoke/compare-browser.mjs ~/sapporo-e2e/replay.jsonl ~/sapporo-e2e/received.json
 ```
 
-期待: `送信 1280 件、受信(amedas/live、送った書き込みの分)1280 件、欠落 0 件、重複 0 件`、`条件付き購読の通知: 5cm 以上 5 件、3cm 以上 16 件`、終了コード 0。`stats()` の `latency.median` は 300〜600ms、`latency.p95` は 2000ms 以下、`total` は 1281(setup の1件を含む)。
+期待: `送信 1280 件、受信(amedas/live、送った書き込みの分)1280 件、欠落 0 件、重複 0 件`、`条件付き購読の通知: 5cm 以上 5 件、3cm 以上 16 件`、終了コード 0。`stats()` の `latency.median` は 1000ms 以下、`latency.p95` は 2000ms 以下(機によって変わる。申し送り 8節の測定では中央値 約 0.4 秒)、`total` は 1280(新規に起動した Stellio での最初の `setup`)または 1281(`setup` をやり直した場合。余分な通知の1件を含む)。
 
 結果(件数、遅延の中央値 / p95 / 最大、測定した機)を、PR の本文に書く。スクリーンショットは `~/sapporo-e2e/` に残し、リポジトリには入れない。`git status --short` で、何も増えていないことを確かめる。
 
@@ -4456,8 +4765,8 @@ node scripts/smoke/compare-browser.mjs ~/sapporo-e2e/replay.jsonl ~/sapporo-e2e/
 3. **1時間の連続運転**: `npm run setup -- --from 2025-11-15T00:00:00+09:00` と `npm run replay -- --from 2025-11-15T00:00:00+09:00 --to 2025-11-19T04:00:00+09:00`(601 ステップ、6,000ms/ステップで約 60 分)。開始時と終了時に、開発者ツールの Memory(または `performance.memory.usedJSHeapSize`)と、アクティビティモニタのメモリを記録し、増え続けていないこと、HUD の遅延の p95 が 2 秒以下のままであること、`compare-browser.mjs` で欠落 0 件、重複 0 件を確かめる(`--log` を付けて実行する)。
 4. **音**: 会場のスピーカーにつないで、「音を有効化」を押す手順を、発表の最初の段取りに入れる(ページを読み直すと、もう一度押す必要がある)。音量と聞こえ方を確かめる。
 5. **ネットワーク**: 有線 LAN を使う(Wi-Fi は混雑で切れやすい)。Stellio の初回の起動と `setup` は、ネットワークのある状態で行う(コア context の取得。README)。会場のネットワークが使えない場合は `?live=off` で開く。
-6. **ポートの公開**: Mosquitto(1883、9001)、Stellio(8080)、地図アプリ(4173)が `127.0.0.1` だけで待ち受けていることを `lsof -nP -iTCP -sTCP:LISTEN | grep -E ':(1883|9001|8080|4173|3120)'` で確かめる。`*:` や `0.0.0.0:` で待ち受けているものがあれば止める(会場の LAN から、認証なしで書き込めてしまう)。ポート 3120 のような、ホストで動かす別のブローカーも同じ(`127.0.0.1` にだけ結び付ける)。
-7. **当日の段取り**: ブラウザーを全画面(F11 か ⌃⌘F)にし、ページを開いてから `setup`、`replay` の順に実行する。やり直すときは、ページを読み直してから `setup` を実行する(HUD の件数と遅延の統計を、新しい再生だけにするため)。
+6. **ポートの公開**: Mosquitto(1883、9001)、Stellio(8080)、地図アプリ(4173)が `127.0.0.1` だけで待ち受けていることを `lsof -nP -iTCP -sTCP:LISTEN | grep -E ':(1883|9001|8080|4173)'` で確かめる。`*:` や `0.0.0.0:` で待ち受けているものがあれば止める(会場の LAN から、認証なしで書き込めてしまう)。当日のブローカーのポートも同じ(`127.0.0.1` にだけ結び付け、上の正規表現にそのポートを足して確かめる)。
+7. **当日の段取り**: ブラウザーを全画面(F11 か ⌃⌘F)にし、ページを開いてから `setup`、`replay` の順に実行する。やり直すときは、ページを開いたまま `setup` と `replay` を実行してよい(時計は新しい再生の時刻に戻り、条件ヒットももう一度出る。Task 4、5)。HUD の受信件数は、ページを開いてからの累計のまま増える(遅延の統計は直近 2,000 件、レートは直近 60 秒)。
 
 ### レビューゲート G(工程4)
 
@@ -4478,13 +4787,13 @@ node scripts/smoke/compare-browser.mjs ~/sapporo-e2e/replay.jsonl ~/sapporo-e2e/
 | 5 前文(タイルなし、外部通信なし) | Task 1(`page.test.mjs`)、Task 9(グリフを使わない)、レビューゲート D |
 | 5.1 モジュール構成 | `mqtt-feed` = Task 3、10。`dedupe` = Task 4。`store` = Task 5、6(区の値と統計を2つのファイルに分けた)。`map-layer` = Task 9、17。`effects/` = Task 11、16、18。`panels/` = Task 9〜12。`live-widget` = Task 14 |
 | 5.2 演出 1〜6 | HUD = Task 10。時計 = Task 9、10。波紋 = Task 11。ヒット欄と通知ログ = Task 11、12。ダーク背景・面表示・雪の粒 = Task 1、9、13、16。音 = Task 18 |
-| 5.3 試作からの修正点 | 文字の読みやすさ = Task 7、9。「観測時刻」= Task 1。DPR 1.5 = Task 16。書き込みの識別子での重複排除 = Task 4。N03 の境界と出典 = Task 1、9。色の刻み = Task 7。札幌市のタイトル = Task 1 |
+| 5.3 試作からの修正点 | 文字の読みやすさ = Task 7、9、13(1280 × 720)。「観測時刻」= Task 1。DPR 1.5 = Task 16。書き込みの識別子での重複排除 = Task 4。N03 の境界と出典 = Task 1、9。色の刻み = Task 7。札幌市のタイトル = Task 1 |
 | 5.4 当日の最新値 | Task 14 |
-| 5.5 設定(`?mqtt=`、表示範囲) | Task 2、9 |
+| 5.5 設定(`?mqtt=`、表示範囲) | Task 2、9、13(パネルを避けた表示範囲) |
 | 5.6 検証(純関数の単体テスト、Playwright、受信数の突き合わせ、実機) | Task 2〜7、16(単体)、Task 9〜18(Playwright)、Task 19 Step 3(`?debug` と突き合わせ)、Step 4(実機) |
 | 6.1 テストの層(画面は手動、スクリーンショットは入れない、発表前の通し) | Task 9〜19、Task 19 Step 4 |
 | 6.3 出典(画面に常時表示、気象庁) | Task 1、14、15 Step 3 |
-| 6.4 README | Task 15(既存の節に「地図アプリ」を足す。1〜6 の構成は計画A で入れた形のまま) |
+| 6.4 README | 1〜3、5、6 は計画A で入れた(何を見せるか、動かし方、再生の速度、出典とライセンス、別のブローカー)。4「仕組み」と、地図アプリの節は Task 15 で足す |
 | 6.5 CI(lint は計画Bで入れる、SHA のピン留め) | Task 1 Step 6〜8 |
 | 7 工程3〜4、7.1 優先度 | 必須 = Task 1〜11(ゲート D)、次点 = Task 12〜15(ゲート E)、余裕 = Task 16〜18(ゲート F)、工程4 = Task 14、15、19(ゲート G) |
 | 申し送り 1〜11 | 1、3 = Task 3。2、5 = Task 3、5。4 = Task 3(`metadata` を読まない)。6 = Task 5、6、19。7 = Task 4、11、19。8 = Task 6、19。9 = Task 2、3。10 = Task 5、13 |
@@ -4493,8 +4802,9 @@ node scripts/smoke/compare-browser.mjs ~/sapporo-e2e/replay.jsonl ~/sapporo-e2e/
 
 **型と名前の整合:** `Observation`(Task 3)は Task 4〜6、8、10〜12、16 で同じ形を使う。`Decision`(Task 4)の `key`、`tier`、`ward`、`value` は Task 11 の `ripples.hit`、`createHitList.render`、Task 18 の `installSound` で使う。`WardState`(Task 5)の `snowHeight`、`temperature`、`snowfall1h`、`snowDelta1h`、`windSpeed` は Task 9(`labels.update`)、Task 10(`setSnow`)、Task 12(ログ)、Task 16(`snowIntensity`)で使う。`app` の `on`、`positions`、`mapLayer`、`fx`、`wardNames`、`config`(Task 10)と、`app.ripples`(Task 11)、`app.controls`(Task 12)、`app.snow`(Task 16)、`app.soundPlays`(Task 18)は、定義したタスクより後でだけ使う。`snowColorExpression`(Task 7)は Task 9、13、17 で同じ名前。`window.__sapporo.received` の要素の `id` と `sentAt`(Task 10)は、`compare-browser.mjs`(Task 19)のキー `` `${id}|${sentAt}` `` と、`replay --log` の `id`、`sentAt` に一致する。
 
-**Review Focus:** 5項目のそれぞれに、担当のタスクのテスト(または画面の確認の手順)を入れた。MQTT の再接続のあとも購読が成立していること(`resubscribe: false` と、接続のたびの購読)は、単体テストにできないため、Task 10 Step 5 の画面の確認(件数が 30 ずつ増える)で確かめる。
+**Review Focus:** 5項目のそれぞれに、担当のタスクのテスト(または画面の確認の手順)を入れた。計画のレビューで見つかった、setup をやり直したときに条件ヒットが出なくなる問題は、Review Focus 3 に入れ、Task 4 のテスト(`repeatAfterMs`、`nextHitOrder`)と Task 11 Step 5 の画面の確認で押さえた。隠れたタブで波紋の要素がたまる問題は、Task 11 の `canPulse` のテストで押さえた。MQTT の再接続のあとも購読が成立していること(`resubscribe: false` と、接続のたびの購読)は、単体テストにできないため、Task 10 Step 5 の画面の確認(件数が 30 ずつ増える)で確かめる。
 
 **計画を書いたときに確かめたこと(2026-10-04)**
 - `npm view`: vite 8.3.2、maplibre-gl 6.12.0、mqtt 5.16.0、eslint 10.12.0、@eslint/js 10.0.1、globals 17.13.0。
-- 使い捨ての場所で、Vite 8.3.2 + MapLibre 6.12.0 + mqtt.js 5.16.0 のアプリをビルドし、`vite preview` と `vite`(開発サーバー)の両方で、地図の描画(Worker を含む)、Mosquitto への WebSocket の接続と受信、`data/` の import を確かめた。この計画のすべての `web/`、`scripts/`、`test/` のファイルを、この計画の本文と同じ内容で置き、`npm run lint`、`npm test`(Node 24 と、`npx -y node@22`。既存の 124 件を含めて 209 件)、`npm run web:build` が通ること、fake-notify(封筒あり・なし、3つの順序)で、HUD、時計、波紋、ヒット欄、通知ログ、当日の最新値(実際の気象庁の取得)、雪の粒、円表示、音のボタンが動くことを、Playwright で確かめた。Task 9 と Task 10 の段階の main.js も、それぞれビルドと lint が通ることを確かめた。
+- 使い捨ての場所で、Vite 8.3.2 + MapLibre 6.12.0 + mqtt.js 5.16.0 のアプリをビルドし、`vite preview` と `vite`(開発サーバー)の両方で、地図の描画(Worker を含む)、Mosquitto への WebSocket の接続と受信、`data/` の import を確かめた。この計画のすべての `web/`、`scripts/`、`test/` のファイルを、この計画の本文と同じ内容で置き、`npm run lint`、`npm test`(Node 24 と、`npx -y node@22`。既存の 124 件を含めて 215 件)、`npm run web:build` が通ること、fake-notify(封筒あり・なし、3つの順序)で、HUD、時計、波紋、ヒット欄、通知ログ、当日の最新値(実際の気象庁の取得)、雪の粒、円表示、音のボタンが動くことを、Playwright で確かめた。Task 9 と Task 10 の段階の main.js も、それぞれビルドと lint が通ることを確かめた。Task 13 の 1280 × 720 の調整(`@media`、余白 +60、南区のラベルのずらし)は、1280 × 720 と 1920 × 1080 のスクリーンショットで、ラベルが重ならず、パネルに隠れず、出典が切れないことを確かめた(+24 では手稲区と厚別区のラベルの半分がパネルに隠れたため、+60 にした)。Task 11 Step 5 の「やり直した再生」(60 秒以上空けて同じヒットを流す)で、ラベルがもう一度出て、ヒット欄の行が1行のまま上に来ることも確かめた。
+- 製品を特定できる値(製品名、既定のポート番号)が計画の本文にないことを grep で確かめた。
