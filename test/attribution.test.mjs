@@ -12,7 +12,7 @@ const meta = {
     modified: '2026-06-29',
     url: 'https://ckan.pf-sapporo.jp/dataset/sapporo_weather',
   },
-  n03: { version: 'N03-20250101', url: 'https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2025/N03-20250101_01_GML.zip' },
+  n03: { version: 'N03-20250101', retrievedAt: '2026-10-03', url: 'https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2025/N03-20250101_01_GML.zip' },
 };
 
 test('CC BY 4.0 の表示要件(作成者、データセット名と URL、ライセンスと URL、取得日、改変)を含む', () => {
@@ -22,9 +22,10 @@ test('CC BY 4.0 の表示要件(作成者、データセット名と URL、ラ�
   }
 });
 
-test('国土数値情報の年次版と、加工した旨を含む', () => {
+test('国土数値情報の年次版と、取得日と、加工した旨を含む', () => {
   const md = renderAttribution(meta);
   assert.ok(md.includes('N03-20250101'));
+  assert.match(md.split('## 区の境界')[1], /取得日: 2026-10-03/);
   assert.ok(md.includes('加工して作成'));
 });
 

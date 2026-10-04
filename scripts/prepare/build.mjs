@@ -13,8 +13,12 @@ const OUT = 'data';
 
 mkdirSync(OUT, { recursive: true });
 
+// 取得日は、キャッシュのファイルごとに、実際にダウンロードしたときに記録する(retrieved-at.mjs)。
+// 記録のないキャッシュがあれば、そのデータの出力を書く前に止める(取得日を推測しない)。
+
 // 1. 区の境界
-const n03Path = await ensureN03(RAW, { refresh, onDownload: () => recordRetrievedAt(RAW) });
+const n03Path = await ensureN03(RAW, { refresh, onDownload: (name) => recordRetrievedAt(RAW, name) });
+const n03RetrievedAt = readRetrievedAt(RAW, [N03.zip]);
 const wards = extractWards(JSON.parse(readFileSync(n03Path, 'utf8')));
 writeFileSync(`${OUT}/wards.geojson`, JSON.stringify(wards));
 console.log(`${OUT}/wards.geojson: ${wards.features.length} 区(${N03.version})`);
@@ -24,15 +28,22 @@ const MONTH = '2025-11';
 const { pkg, byName } = await ckanResources(2025);
 mkdirSync(`${OUT}/observations`, { recursive: true });
 const resources = {};
+const csvName = (w) => `sapporo-2025-${w.id}.csv`;
 for (const w of WARDS) {
   const url = byName.get(w.name);
   if (!url) throw new Error(`CKAN に ${w.name} の 2025 年の CSV がありません`);
   resources[w.id] = url;
-  const csvPath = `${RAW}/sapporo-2025-${w.id}.csv`;
+  const csvPath = `${RAW}/${csvName(w)}`;
   if (refresh || !existsSync(csvPath)) {
     await download(url, csvPath);
-    recordRetrievedAt(RAW);
+    recordRetrievedAt(RAW, csvName(w));
   }
+}
+// 10区の CSV のうち、最も早い取得日(控えめな側)
+const ckanRetrievedAt = readRetrievedAt(RAW, WARDS.map(csvName));
+for (const w of WARDS) {
+  const url = resources[w.id];
+  const csvPath = `${RAW}/${csvName(w)}`;
   const observations = parseObservationCsv(readFileSync(csvPath, 'utf8'), { month: MONTH });
   const { rows, missing } = summarizeMissing(observations);
   const packed = packObservations(observations);
@@ -43,7 +54,7 @@ for (const w of WARDS) {
 
 // 3. 出典
 const meta = {
-  retrievedAt: readRetrievedAt(RAW),
+  retrievedAt: ckanRetrievedAt,
   ckan: {
     title: pkg.title,
     license: pkg.license_title,
@@ -53,7 +64,7 @@ const meta = {
     modified: String(pkg.metadata_modified).slice(0, 10),
     url: 'https://ckan.pf-sapporo.jp/dataset/sapporo_weather',
   },
-  n03: { version: N03.version, url: N03.url },
+  n03: { version: N03.version, url: N03.url, retrievedAt: n03RetrievedAt },
   resources,
 };
 writeFileSync(`${OUT}/source-meta.json`, JSON.stringify(meta, null, 2) + '\n');

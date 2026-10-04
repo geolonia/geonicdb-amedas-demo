@@ -10,7 +10,8 @@
   },
   "n03": {
     "version": "N03-20250101",
-    "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2025/N03-20250101_01_GML.zip"
+    "url": "https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2025/N03-20250101_01_GML.zip",
+    "retrievedAt": "2026-10-04"
   },
   "resources": {
     "chuo": "https://ckan.pf-sapporo.jp/dataset/214427f1-4f4d-4a85-9450-011db2f787fb/resource/54f129e4-593d-477a-804c-b81581778348/download/2025kansokukirokuchuo.csv",

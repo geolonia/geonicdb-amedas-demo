@@ -22,7 +22,7 @@ export async function ensureN03(rawDir, { refresh = false, onDownload = () => {}
   const geojson = join(rawDir, N03.geojson);
   if (refresh || !existsSync(zip)) {
     await download(N03.url, zip);
-    onDownload();
+    onDownload(N03.zip);
   }
   if (refresh || !existsSync(geojson)) execFileSync('unzip', ['-o', '-q', zip, N03.geojson, '-d', rawDir]);
   return geojson;

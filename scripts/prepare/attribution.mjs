@@ -11,7 +11,7 @@ export function renderAttribution(meta) {
 - 作成者: ${ckan.author}
 - データセット: [${ckan.title}](${ckan.url})
 - ライセンス: ${ckan.license}([CC BY 4.0](${ckan.licenseUrl}))
-- 取得日: ${retrievedAt}(データセットの最終更新日: ${ckan.modified})
+- 取得日: ${retrievedAt}(10区の CSV のうち、最も早い取得日。データセットの最終更新日: ${ckan.modified})
 - 改変: 2025年のうち 2025-11-01 〜 2025-11-30 の分(10区、10分ごと)だけを抽出し、CSV から JSON に形式を変換しました。
   欠測(「×」など)は、その属性を持たない形にしました。時刻は JST から UTC に変換し、24:00 は翌日の 00:00 として扱いました。
   数値の変更はしていません。変換後のデータは \`data/observations/\` にあります。
@@ -21,6 +21,7 @@ export function renderAttribution(meta) {
 
 - 出典: 「国土数値情報(行政区域データ)」(国土交通省)(${n03.version})を加工して作成
 - 取得元: ${n03.url}(データのページ: ${N03_PAGE})
+- 取得日: ${n03.retrievedAt}
 - 加工: 札幌市10区だけを抽出し、座標を小数点以下4桁に丸めて GeoJSON にしました(国土数値情報を加工して作成)。
   結果は \`data/wards.geojson\` にあります。
 
