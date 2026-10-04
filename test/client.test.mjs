@@ -85,3 +85,39 @@ test('subscriptionsOrThrow: 2xx で配列ならその配列、それ以外は読
   assert.throws(() => subscriptionsOrThrow({ status: 200, text: '{}', json: {} }), /購読の一覧/);
   assert.throws(() => subscriptionsOrThrow({ status: 500, text: 'err', json: [] }), /500/);
 });
+
+test('listAllSubscriptions: 100 件ずつ offset を進めて、すべての購読を取り出す', async () => {
+  const all = Array.from({ length: 250 }, (_, i) => ({ id: `urn:s:${i}` }));
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(url);
+    const u = new URL(url);
+    const limit = Number(u.searchParams.get('limit'));
+    const offset = Number(u.searchParams.get('offset'));
+    return { status: 200, text: async () => JSON.stringify(all.slice(offset, offset + limit)) };
+  };
+  const subs = await createClient({ ...base, fetchImpl }).listAllSubscriptions();
+  assert.deepEqual(urls, [
+    'http://b/ngsi-ld/v1/subscriptions?limit=100&offset=0',
+    'http://b/ngsi-ld/v1/subscriptions?limit=100&offset=100',
+    'http://b/ngsi-ld/v1/subscriptions?limit=100&offset=200',
+  ]);
+  assert.deepEqual(subs, all);
+});
+
+test('listAllSubscriptions: 途中のページが 2xx でない、または配列でなければ、読みやすいエラーにする', async () => {
+  const page = (body, status = 200) => ({ status, text: async () => body });
+  const full = JSON.stringify(Array.from({ length: 100 }, (_, i) => ({ id: `urn:s:${i}` })));
+  const failing = (second) => async (url) => (new URL(url).searchParams.get('offset') === '0' ? page(full) : second);
+  await assert.rejects(createClient({ ...base, fetchImpl: failing(page('boom', 500)) }).listAllSubscriptions(), /購読の一覧を取得できません: 500 boom/);
+  await assert.rejects(createClient({ ...base, fetchImpl: failing(page('<html>')) }).listAllSubscriptions(), /購読の一覧を読み取れません/);
+  await assert.rejects(createClient({ ...base, fetchImpl: failing(page('{}')) }).listAllSubscriptions(), /購読の一覧を読み取れません/);
+});
+
+test('listAllSubscriptions: ページが終わらなければ、上限で止めてエラーにする', async () => {
+  const full = JSON.stringify(Array.from({ length: 100 }, (_, i) => ({ id: `urn:s:${i}` })));
+  let n = 0;
+  const fetchImpl = async () => { n++; return { status: 200, text: async () => full }; };
+  await assert.rejects(createClient({ ...base, fetchImpl }).listAllSubscriptions(), /ページ/);
+  assert.equal(n, 100);
+});

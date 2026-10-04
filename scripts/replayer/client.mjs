@@ -1,6 +1,9 @@
 // 207(一部の属性だけ失敗)は、成功としない。
 export const ok = (r) => r.status >= 200 && r.status < 300 && r.status !== 207;
 
+const PAGE = 100;
+const MAX_PAGES = 100;
+
 export function createClient({ apiBase, tenant, context, fetchImpl = fetch, timeoutMs = 10000 }) {
   const link = `<${context}>; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"`;
 
@@ -27,8 +30,9 @@ export function createClient({ apiBase, tenant, context, fetchImpl = fetch, time
     deleteSubscription: (id) => request('DELETE', `/subscriptions/${enc(id)}`),
     patchAttrs: (id, attrs) => request('PATCH', `/entities/${enc(id)}/attrs`, attrs),
     appendAttrs: (id, attrs) => request('POST', `/entities/${enc(id)}/attrs`, attrs),
-    async listSubscriptions() {
-      const r = await request('GET', '/subscriptions?limit=100');
+    // 購読の一覧の1ページ(offset から最大 limit 件)
+    async listSubscriptions({ offset = 0, limit = PAGE } = {}) {
+      const r = await request('GET', `/subscriptions?limit=${limit}&offset=${offset}`);
       let json = null; // 読めなかったときは null(空配列と区別する)
       try {
         json = JSON.parse(r.text || '[]');
@@ -36,6 +40,16 @@ export function createClient({ apiBase, tenant, context, fetchImpl = fetch, time
         json = null;
       }
       return { ...r, json };
+    },
+    // すべての購読。ページが PAGE 件より少なくなるまで、offset を進めて読む。
+    async listAllSubscriptions() {
+      const all = [];
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const items = subscriptionsOrThrow(await this.listSubscriptions({ offset: page * PAGE }));
+        all.push(...items);
+        if (items.length < PAGE) return all;
+      }
+      throw new Error(`購読の一覧が ${MAX_PAGES} ページ(${MAX_PAGES * PAGE} 件)を超えたため、読むのをやめました`);
     },
   };
 }
