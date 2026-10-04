@@ -190,3 +190,34 @@ test('既定の時計は単調な時計(壁時計の変更で、待ち時間が�
   // 偽の sleep は時刻を進めないので、待ち時間は再生の長さ(3 ステップ × 20ms)までになる。壁時計を使うと、約 1 時間になる。
   assert.ok(sleeps.every((ms) => ms <= 60), `待ち時間: ${sleeps}`);
 });
+
+test('write の例外の内容を、失敗ごとに onWarn へ渡す(区と例外のメッセージ)', async () => {
+  const clock = fakeClock();
+  const warns = [];
+  let n = 0;
+  const write = async (ward) => { n++; if (n === 1) throw new Error('request timed out'); return true; };
+  await runReplay({ steps: steps(1), intervalMs: 1000, write, onWarn: (m) => warns.push(m), ...clock });
+  assert.deepEqual(warns, ['a の書き込みで例外: request timed out']);
+});
+
+test('連続の失敗で中断するとき、最後の例外の内容を、エラーのメッセージと cause に含める', async () => {
+  const clock = fakeClock();
+  let n = 0;
+  const write = async () => { n++; throw new Error(`ECONNREFUSED ${n}`); };
+  const err = await runReplay({ steps: steps(10), intervalMs: 10, write, onWarn: () => {}, ...clock }).catch((e) => e);
+  assert.match(err.message, /連続 5 回/);
+  assert.match(err.message, /ECONNREFUSED 5/);
+  assert.equal(err.cause?.message, 'ECONNREFUSED 5');
+});
+
+test('例外のあとに成功すれば、連続の失敗は数え直し、中断のエラーに古い例外を含めない', async () => {
+  const clock = fakeClock();
+  let n = 0;
+  // 1〜4 回目は例外、5 回目は成功、6〜10 回目は 2xx 以外(例外なし)
+  const write = async () => { n++; if (n <= 4) throw new Error('old cause'); return n === 5; };
+  const err = await runReplay({ steps: steps(10), intervalMs: 10, write, onWarn: () => {}, ...clock }).catch((e) => e);
+  assert.equal(n, 10);
+  assert.match(err.message, /連続 5 回/);
+  assert.doesNotMatch(err.message, /old cause/);
+  assert.equal(err.cause, undefined);
+});

@@ -40,10 +40,14 @@ export async function runReplay({
     for (const [k, { ward, obs }] of writes.entries()) {
       if (k > 0) await waitFor(i * intervalMs + (k * intervalMs) / writes.length, `${where}(${k + 1}/${writes.length} 件目、区: ${ward})`);
       let ok = false;
+      // 最後の失敗が例外だったときの、その例外(中断のエラーに原因として含める)
+      let error = null;
       try {
         ok = await write(ward, obs, steps[i].t);
-      } catch {
+      } catch (e) {
         ok = false;
+        error = e;
+        onWarn?.(`${ward} の書き込みで例外: ${e?.message ?? e}`);
       }
       if (ok) {
         consecutive = 0;
@@ -52,7 +56,9 @@ export async function runReplay({
         stats.failed++;
         consecutive++;
         if (consecutive >= maxConsecutiveFailures) {
-          throw new Error(`書き込みが連続 ${maxConsecutiveFailures} 回失敗したため中断しました(ステップ ${i + 1}/${steps.length}、区: ${ward})`);
+          const where = `ステップ ${i + 1}/${steps.length}、区: ${ward}`;
+          const cause = error ? `。最後の例外: ${error?.message ?? error}` : '';
+          throw new Error(`書き込みが連続 ${maxConsecutiveFailures} 回失敗したため中断しました(${where})${cause}`, error ? { cause: error } : undefined);
         }
       }
     }

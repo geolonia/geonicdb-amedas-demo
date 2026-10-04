@@ -37,7 +37,8 @@ try {
   console.log(`完了: ${stats.steps} ステップ、書き込み ${stats.writes} 件、失敗 ${stats.failed} 件`);
   if (stats.failed > 0) process.exitCode = 1;
 } catch (e) {
-  console.error(`replay に失敗しました: ${e.message}${e.cause?.message ? ` (${e.cause.message})` : ''}`);
+  const cause = e.cause?.message && !e.message.includes(e.cause.message) ? ` (${e.cause.message})` : '';
+  console.error(`replay に失敗しました: ${e.message}${cause}`);
   process.exitCode = 1;
 } finally {
   log?.end();
