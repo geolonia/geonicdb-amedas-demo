@@ -87,3 +87,34 @@ test('条件付き購読の通知をトピックごとに数える(live は数�
   st.recordConditional(observation({ kind: 'live' }));
   assert.deepEqual(st.snapshot(T0).cond, { ge5: 1, ge3: 2 });
 });
+
+test('sentAt が受信時刻より未来の通知は、遅延の標本に入らず、total とレートには数えられる', () => {
+  const st = createStats();
+  st.recordLive(liveAt(T0, -5000)); // sentAt = T0 + 5000 (未来)
+  const s = st.snapshot(T0 + 1000);
+  assert.equal(s.total, 1);
+  assert.equal(s.latency.count, 0);
+  assert.equal(s.latency.last, null);
+  assert.equal(s.latency.median, null);
+});
+
+test('負の標本が混ざっても中央値などが汚れない', () => {
+  const st = createStats();
+  st.recordLive(liveAt(T0, 100)); // latency = 100
+  st.recordLive(liveAt(T0 + 1, -50)); // sentAt が未来、捨てる
+  st.recordLive(liveAt(T0 + 2, 200)); // latency = 200
+  st.recordLive(liveAt(T0 + 3, 300)); // latency = 300
+  const { latency } = st.snapshot(T0 + 10);
+  assert.equal(latency.count, 3);
+  assert.equal(latency.median, 200); // [100, 200, 300] の中央値(p50)
+  assert.equal(latency.max, 300);
+});
+
+test('受信時刻と同時刻(遅延 0)は標本に入る', () => {
+  const st = createStats();
+  st.recordLive(liveAt(T0, 0)); // sentAt = T0, latency = 0
+  const { latency } = st.snapshot(T0 + 1000);
+  assert.equal(latency.count, 1);
+  assert.equal(latency.last, 0);
+  assert.equal(latency.median, 0);
+});

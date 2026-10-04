@@ -33,9 +33,12 @@ export function createStats({ windowMs = 60_000, maxLatencySamples = 2000 } = {}
       lastReceivedAt = r;
       times.push(r);
       if (obs.sentAt !== null) {
-        lastLatency = r - obs.sentAt;
-        latencies.push(lastLatency);
-        if (latencies.length > maxLatencySamples) latencies.shift();
+        const l = r - obs.sentAt;
+        if (Number.isFinite(l) && l >= 0) {
+          lastLatency = l;
+          latencies.push(l);
+          if (latencies.length > maxLatencySamples) latencies.shift();
+        }
       }
     },
     recordConditional(obs) {
