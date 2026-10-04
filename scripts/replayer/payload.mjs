@@ -55,7 +55,9 @@ export function buildSubscriptions({ context, mqttBase, mqttVersion }) {
   const mk = (topic, extra) => subscription(context, mqttBase, mqttVersion, topic, extra);
   const cond = (threshold) => ({ watchedAttributes: ['snowfall1h'], q: `snowfall1h>=${threshold}` });
   return [
-    mk('amedas/live'),
+    // replay は書き込みごとに sentAt を更新する。sentAt だけを監視すれば、PATCH 1回につき通知は1回になる
+    // (書き込んだ属性ごとに通知するブローカーで、通知の数を約6分の1にする)。通知には、エンティティの全属性が入る。
+    mk('amedas/live', { watchedAttributes: ['sentAt'] }),
     mk('amedas/cond/snowfall1h_ge5', cond(5)),
     mk('amedas/cond/snowfall1h_ge3', cond(3)),
   ];

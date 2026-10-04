@@ -1,4 +1,5 @@
 // 使い方: npm run smoke -- [--interval MS] [--from ISO] [--to ISO]
+// 通知を待つ上限は、再生にかかった時間(最低 10 分)。環境変数 SMOKE_DRAIN_MAX_MS(ミリ秒)で変えられる。
 // setup と replay を実行しながら MQTT を購読し、(ID, sentAt)で突き合わせる。
 // 出力: 欠落の件数、配信の遅延(中央値、p95、最大)、前半と後半の遅延(滞留の兆候)、条件付き購読の件数。
 import { spawn } from 'node:child_process';
@@ -35,12 +36,16 @@ const run = (script, extra = []) =>
   });
 
 if ((await run('scripts/replayer/setup.mjs')) !== 0) process.exit(2);
+const replayStart = Date.now();
 const replayCode = await run('scripts/replayer/replay.mjs', ['--log', logPath]);
 
-// 通知が出そろうまで待つ(最後の通知から 15 秒、新しい通知がなくなるまで。最長 10 分)
+// 通知が出そろうまで待つ(最後の通知から 15 秒、新しい通知がなくなるまで)。
+// 長い再生では、滞留した通知が遅れて届くことがある。届く前に打ち切って「欠落」と誤判定しないよう、
+// 上限は再生にかかった時間(最低 10 分)にする。
+const drainMaxMs = Number(process.env.SMOKE_DRAIN_MAX_MS ?? Math.max(10 * 60 * 1000, Date.now() - replayStart));
 let lastCount = -1;
 let quietSince = Date.now();
-const deadline = Date.now() + 10 * 60 * 1000;
+const deadline = Date.now() + drainMaxMs;
 while (Date.now() < deadline) {
   const n = received.live.size + received.ge5.size + received.ge3.size;
   if (n !== lastCount) {
@@ -50,6 +55,7 @@ while (Date.now() < deadline) {
   await new Promise((r) => setTimeout(r, 1000));
 }
 client.end();
+const timedOut = Date.now() >= deadline;
 
 const sent = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((r) => r.status >= 200 && r.status < 300);
 const sentKeys = new Set(sent.map((r) => `${r.id}|${r.sentAt}`));
@@ -67,4 +73,5 @@ console.log(`遅延 ms: 中央値 ${all.median}、p95 ${all.p95}、最大 ${all.
 console.log(`遅延の中央値 ms: 最初の4分の1 ${first.median}、最後の4分の1 ${last.median}(後半が大きく増えていれば、通知が滞留している)`);
 console.log(`条件付き購読の件数: 5cm 以上 ${received.ge5.size} 件、3cm 以上 ${received.ge3.size} 件`);
 if (missing.length > 0) console.log('欠落の例:', missing.slice(0, 5));
+if (timedOut) console.log(`通知を待つ上限(${drainMaxMs}ms)に達したため、打ち切りました(欠落には、遅れて届く通知が含まれる可能性があります)`);
 process.exit(missing.length > 0 || replayCode !== 0 ? 1 : 0);

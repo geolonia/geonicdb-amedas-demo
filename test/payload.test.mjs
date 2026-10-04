@@ -43,6 +43,8 @@ test('購読は3本: 全件、5cm 以上、3cm 以上(条件付きは watchedAtt
     ['mqtt://mosquitto:1883/amedas/live', 'mqtt://mosquitto:1883/amedas/cond/snowfall1h_ge5', 'mqtt://mosquitto:1883/amedas/cond/snowfall1h_ge3'],
   );
   assert.equal(subs[0].q, undefined);
+  // 書き込みごとに sentAt を更新するので、PATCH 1回につき通知は1回になる(属性ごとに通知するブローカーの負荷を減らす)。
+  assert.deepEqual(subs[0].watchedAttributes, ['sentAt']);
   assert.equal(subs[1].q, 'snowfall1h>=5');
   assert.equal(subs[2].q, 'snowfall1h>=3');
   assert.deepEqual(subs[1].watchedAttributes, ['snowfall1h']);
