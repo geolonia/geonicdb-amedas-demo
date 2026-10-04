@@ -101,7 +101,7 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 - `@context` を URL の形で受け付ける。
 - 標準の MQTT の通知を送る。
 
-128ステップ(約13分)の再生は、Stellio でだけ測っています。ネットワークのない状態での起動は、試していません。
+128ステップ(約13分)の再生は、Stellio でだけ測っています。ネットワークのない状態で新規に起動すると、Stellio が NGSI-LD のコア context(`https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld`)を外部から取得できず、`setup` のエンティティ作成が 503(`LOADING_REMOTE_CONTEXT_FAILED`)で失敗します。このリポジトリが配信する `weather.jsonld` だけでは足りません。初回の起動と `setup` は、ネットワークがある状態で行ってください。
 
 ### データを作り直したいとき
 

@@ -166,7 +166,7 @@ Node.js の小さなスクリプト群と、Vite 製(素の JavaScript)の静的
 
 ### 4.4 公開リポジトリでの既定値
 
-- `compose/` は Stellio、Mosquitto、**`@context` を配信する静的サーバー**の3つ。試作では、Stellio が `@context` を URL でしか受け付けなかったため、静的サーバー(`weather.jsonld`)が必要だった。Stellio が ETSI のコア context をネットワークから取得するかは未確認。会場でネットワークを切っても動くように、context は compose の内側から配信する。
+- `compose/` は Stellio、Mosquitto、**`@context` を配信する静的サーバー**の3つ。試作では、Stellio が `@context` を URL でしか受け付けなかったため、静的サーバー(`weather.jsonld`)が必要だった。Stellio は ETSI のコア context も外部(`uri.etsi.org`)から取得する。ネットワークなしで新規に起動すると、エンティティの作成が 503(`LOADING_REMOTE_CONTEXT_FAILED`)で失敗することを、再現して確認した(2026-10-04、独立したレビュー)。独自の context を compose の内側から配信するだけでは、完全なオフライン起動には足りない。
 - Mosquitto は、WebSocket のリスナーを持ち、`allow_anonymous true` とする。ポートは `127.0.0.1` にだけ公開し、その旨を README に明記する。
 - テナントは、既定のテナント(ヘッダーなし)を使う。Stellio のテナントは、環境変数での事前の宣言と再起動が必要なため、公開側では使わない。
 - 購読の MQTT の宛先と `notifierInfo`(MQTT のバージョン、QoS)は、`setup` の設定項目(環境変数)として外に出す。Stellio は compose 内の `mqtt://mosquitto:1883/<topic>` と `mqtt5.0`、他のブローカーは別の値になる。
@@ -312,7 +312,7 @@ GitHub Actions は SHA でピン留めする。内容は、単体テスト、lin
 | 各区の観測点の座標(土木センターの所在地) | 工程1 |
 | Stellio での、通知が遅れない `--interval` の値 | 測定済み(6,000ms/ステップ。4.4) |
 | `sentAt` の DateTime 形式が、Stellio の通知に載るか | 確認済み(通知では `{"type":"DateTime","@value":…}` の形で届く) |
-| Stellio が、コア context をネットワークなしで解決できるか | 未確認 |
+| Stellio が、コア context をネットワークなしで解決できるか | 確認済み(解決できない。新規起動時に外部から取得する)。会場には Wi-Fi があるため、初回の起動と `setup` をネットワークのある状態で行えば足りる。完全オフラインにするには、コア context のローカル解決(Stellio の設定の調査)が必要 |
 | コードのライセンス | MIT で確定(`LICENSE`、`package.json`) |
 | 地図アプリの優先度(7.1)のうち、「余裕があれば」を削る判断 | 工程3の前 |
 | 応募概要(2026-10-03 の確定版)との差分の Issue #2 への記録(Temporal API を使わない、札幌市のみ) | 工程0 |
