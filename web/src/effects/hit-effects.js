@@ -9,7 +9,8 @@ import { placeHitLabel, HIT_DRIFT } from '../lib/hit-placement.js';
 // ヒットのラベルが避けるパネル(隠したパネルは避けない)
 const PANELS = Object.freeze(['clocks', 'hud', 'side', 'title', 'controls', 'legend', 'attribution']);
 
-// ヒットのラベルを、区のラベル、パネル、ほかのヒットのラベルに重ならない位置に置く(lib/hit-placement.js)
+// ヒットのラベルを、区のラベル、パネル、ほかのヒットのラベルに重ならない位置に置く(lib/hit-placement.js)。
+// パネルと区のラベルは重ねてはいけないもの(obstacles)、ほかのヒットのラベルは、やむをえなければ重ねてよいもの(pills)
 function createLabelPlacer(fx) {
   const placed = new WeakMap(); // 置いたヒットのラベル -> 動く範囲を含めた箱
   return (el, x, y, ward) => {
@@ -23,11 +24,17 @@ function createLabelPlacer(fx) {
     const obstacles = [
       ...labels.map(rect),
       ...PANELS.map((id) => document.getElementById(id)).filter((e) => e && e.getClientRects().length > 0).map(rect),
-      ...[...fx.querySelectorAll('.hit-label')].filter((e) => e !== el && placed.has(e)).map((e) => placed.get(e)),
     ];
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    const p = placeHitLabel({ x, y, w, h, obstacles, bounds: { l: 0, t: 0, r: origin.width, b: origin.height }, below: own ? rect(own).b : undefined });
+    const pills = [...fx.querySelectorAll('.hit-label')].filter((e) => e !== el && placed.has(e)).map((e) => placed.get(e));
+    // offsetWidth は整数に丸めた値なので、小数の幅のぶん 1px 足す
+    const w = el.offsetWidth + 1;
+    const h = el.offsetHeight + 1;
+    const bounds = { l: 0, t: 0, r: origin.width, b: origin.height };
+    const p = placeHitLabel({ x, y, w, h, obstacles, pills, bounds, below: own ? rect(own).b : undefined });
+    if (p.overlap > 0) {
+      const where = p.hardOverlap > 0 ? 'パネルか区のラベル' : 'ほかのヒットのラベル';
+      console.warn(`ヒットのラベル(${ward})の置き場所がなく、${where}に ${Math.round(p.overlap)}px² 重ねて置きました`);
+    }
     placed.set(el, { l: p.left, t: p.top - HIT_DRIFT.up, r: p.left + w, b: p.top + h + HIT_DRIFT.down });
     return p;
   };

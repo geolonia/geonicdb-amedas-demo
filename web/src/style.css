@@ -9,6 +9,11 @@
   --hit3: #ffb020;
   --hit5: #ff3d7f;
   --label-bg: rgba(7, 13, 24, 0.72); /* color.js の LABEL_BG と同じ値 */
+  /* ヒットのピルの背景と文字(color.js の HIT_PILL と同じ値。どの大きさでもコントラスト比 4.5 以上) */
+  --pill5-bg: #d81b60;
+  --pill5-text: #ffffff;
+  --pill3-bg: #ffb020;
+  --pill3-text: #1a0b12;
   --ok: #35e08a;
 }
 
@@ -371,8 +376,8 @@ body {
   line-height: 1.25;
   padding: 5px 14px;
   border-radius: 999px;
-  color: #1a0b12;
-  background: var(--hit3);
+  color: var(--pill3-text);
+  background: var(--pill3-bg);
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
   opacity: 0;
   animation: hit-label 4s ease-out forwards;
@@ -380,8 +385,8 @@ body {
 }
 
 .hit-label.ge5 {
-  color: #ffffff;
-  background: var(--hit5);
+  color: var(--pill5-text);
+  background: var(--pill5-bg);
 }
 
 @keyframes hit-label {
@@ -483,8 +488,10 @@ body {
 }
 
 /* ---- 1280 × 720 まで(Task 13) ---- */
-/* 会場の解像度の下限は 1280 × 720。パネルを細くして、地図の幅を確保する */
-@media (max-width: 1400px) {
+/* 会場の解像度の下限は 1280 × 720。パネルを細くして、地図の幅を確保する。
+   境目は 1600px(1440 × 900、1536 × 864 のプロジェクターでも、1400px を超えると地図が狭いまま
+   右の欄とピルが元の大きさに戻り、ピルがラベルや右の欄に重なった) */
+@media (max-width: 1600px) {
   #side {
     width: 320px;
   }

@@ -18,6 +18,19 @@ export const NO_DATA_COLOR = '#262b36';
 export const LABEL_TEXT = '#ffffff';
 export const LABEL_BG = Object.freeze({ r: 7, g: 13, b: 24, a: 0.72 });
 
+// 条件ヒットのピル(.hit-label)の背景と文字。CSS の --pill5-* / --pill3-* と同じ値にする。
+// ge5 は、波紋や外周の --hit5(#ff3d7f)のままだと白い文字とのコントラスト比が 3.37 で、16px の太字(WCAG では
+// 大きい文字に当たらない)の 4.5 を割るため、同じ赤系で濃くする(4.95)。ge3 は暗い文字で 10.4
+export const HIT_PILL = Object.freeze({
+  ge5: Object.freeze({ bg: '#d81b60', text: '#ffffff' }),
+  ge3: Object.freeze({ bg: '#ffb020', text: '#1a0b12' }),
+});
+
+// WCAG 2 の必要なコントラスト比(AA)。大きい文字(太字は 14pt = 18.66px 以上、通常は 18pt = 24px 以上)は 3、それ以外は 4.5
+export function requiredContrast(px, bold) {
+  return px >= (bold ? 18.66 : 24) ? 3 : 4.5;
+}
+
 // MapLibre の fill-color / circle-color の式。feature-state の snow(cm)を読む。値がなければ NO_DATA_COLOR
 export function snowColorExpression() {
   return [

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   SNOW_STOPS, NO_DATA_COLOR, LABEL_TEXT, LABEL_BG, snowColor, snowColorExpression, legendGradientCss,
-  relativeLuminance, contrastRatio, compositeOver, hexToRgb,
+  relativeLuminance, contrastRatio, compositeOver, hexToRgb, HIT_PILL, requiredContrast,
 } from '../../web/src/lib/color.js';
 
 test('刻みは 0、5、15、25、35cm(設計書 5.3)', () => {
@@ -60,4 +60,38 @@ test('ラベルの背景は、CSS の --label-bg と同じ値', () => {
   const css = readFileSync('web/src/style.css', 'utf8');
   const { r, g, b, a } = LABEL_BG;
   assert.ok(css.includes(`--label-bg: rgba(${r}, ${g}, ${b}, ${a});`));
+});
+
+test('requiredContrast: WCAG の大きい文字(太字 18.66px 以上、通常 24px 以上)は 3、それ以外は 4.5', () => {
+  assert.equal(requiredContrast(16, true), 4.5);
+  assert.equal(requiredContrast(18, true), 4.5);
+  assert.equal(requiredContrast(18.67, true), 3);
+  assert.equal(requiredContrast(20, true), 3);
+  assert.equal(requiredContrast(20, false), 4.5);
+  assert.equal(requiredContrast(24, false), 3);
+});
+
+test('ヒットのピル(ge5、ge3)は、16px と 20px の太字のどちらでも、コントラスト比 4.5 以上', () => {
+  for (const tier of ['ge5', 'ge3']) {
+    const { bg, text } = HIT_PILL[tier];
+    const ratio = contrastRatio(text, bg);
+    for (const px of [16, 20]) assert.ok(ratio >= requiredContrast(px, true), `${tier} ${px}px: ${ratio}`);
+    assert.ok(ratio >= 4.5, `${tier}: ${ratio}`);
+  }
+});
+
+test('ヒットのピルの強さの色は区別できる(ge5 は赤系、ge3 は橙系で、背景の色が違う)', () => {
+  const r5 = hexToRgb(HIT_PILL.ge5.bg);
+  const r3 = hexToRgb(HIT_PILL.ge3.bg);
+  assert.ok(r5.r > r5.g * 2, 'ge5 は赤系');
+  assert.ok(r3.g > r3.b * 2 && r3.r > r3.g, 'ge3 は橙系');
+  assert.notEqual(HIT_PILL.ge5.bg, HIT_PILL.ge3.bg);
+});
+
+test('ヒットのピルの色は、CSS の --pill5-bg / --pill5-text / --pill3-bg / --pill3-text と同じ値', () => {
+  const css = readFileSync('web/src/style.css', 'utf8');
+  assert.ok(css.includes(`--pill5-bg: ${HIT_PILL.ge5.bg};`));
+  assert.ok(css.includes(`--pill5-text: ${HIT_PILL.ge5.text};`));
+  assert.ok(css.includes(`--pill3-bg: ${HIT_PILL.ge3.bg};`));
+  assert.ok(css.includes(`--pill3-text: ${HIT_PILL.ge3.text};`));
 });
