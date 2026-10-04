@@ -45,8 +45,8 @@ async function main() {
   const padding = () => {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    const left = Math.min(document.getElementById('hud').getBoundingClientRect().right + 90, w * 0.35);
-    const right = Math.min(w - document.getElementById('side').getBoundingClientRect().left + 90, w * 0.4);
+    const left = Math.min(document.getElementById('hud').getBoundingClientRect().right + 60, w * 0.35);
+    const right = Math.min(w - document.getElementById('side').getBoundingClientRect().left + 60, w * 0.4);
     return { top: Math.round(h * 0.12), bottom: Math.round(h * 0.1), left: Math.round(left), right: Math.round(right) };
   };
   const mapLayer = createMapLayer({ container: document.getElementById('map'), wards, stations, padding });

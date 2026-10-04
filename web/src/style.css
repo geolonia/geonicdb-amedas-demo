@@ -360,12 +360,15 @@ body {
   }
 }
 
+/* 置き場所(left, top)は hit-effects.js が決める(区のラベルとパネルを避ける。lib/hit-placement.js)。
+   動く範囲は、置いた位置から上へ 12px、下へ 6px(lib/hit-placement.js の HIT_DRIFT と対) */
 .hit-label {
   position: absolute;
   z-index: 2;
   white-space: nowrap;
   font-size: 20px;
   font-weight: 700;
+  line-height: 1.25;
   padding: 5px 14px;
   border-radius: 999px;
   color: #1a0b12;
@@ -384,19 +387,19 @@ body {
 @keyframes hit-label {
   0% {
     opacity: 0;
-    transform: translate(-50%, -30px) scale(0.6);
+    transform: translateY(6px) scale(0.6);
   }
   8% {
     opacity: 1;
-    transform: translate(-50%, -64px) scale(1.05);
+    transform: translateY(0) scale(1);
   }
   80% {
     opacity: 1;
-    transform: translate(-50%, -80px);
+    transform: translateY(-4px);
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -104px);
+    transform: translateY(-12px);
   }
 }
 
@@ -476,5 +479,42 @@ body {
   }
   to {
     background: transparent;
+  }
+}
+
+/* ---- 1280 × 720 まで(Task 13) ---- */
+/* 会場の解像度の下限は 1280 × 720。パネルを細くして、地図の幅を確保する */
+@media (max-width: 1400px) {
+  #side {
+    width: 320px;
+  }
+
+  /* ヒット欄の最長の行(例: 「…観測 15:00 厚別区 4cm/h(3cm 以上)」)が、末尾まで1行に収まるようにする */
+  #hits li {
+    font-size: 12px;
+  }
+
+  #hits li time {
+    margin-right: 6px;
+    font-size: 11px;
+  }
+
+  #clocks,
+  #hud {
+    min-width: 260px;
+  }
+
+  .clock-value.observed {
+    font-size: 22px;
+  }
+
+  .ward-label {
+    font-size: 11px;
+  }
+
+  /* ヒットのラベルを小さくして、狭い地図の中で、区のラベルとパネルを避けて置ける場所を増やす */
+  .hit-label {
+    font-size: 16px;
+    padding: 4px 12px;
   }
 }
