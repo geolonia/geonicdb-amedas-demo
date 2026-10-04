@@ -284,3 +284,20 @@ body {
 .ward-label .t-none {
   color: var(--dim);
 }
+
+#fatal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 10px 16px;
+  background: #7a1230;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+}
+
+#fatal[hidden] {
+  display: none;
+}

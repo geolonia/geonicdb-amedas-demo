@@ -2,6 +2,7 @@
 import './style.css';
 import stations from '../../data/stations.json';
 import wardsUrl from '../../data/wards.geojson?url';
+import { loadJson } from './lib/load.js';
 import { createHub } from './lib/hub.js';
 import { legendGradientCss } from './lib/color.js';
 import { createMapLayer } from './map-layer.js';
@@ -9,7 +10,11 @@ import { createWardLabels } from './labels.js';
 import { createClocks } from './panels/clocks.js';
 
 async function main() {
-  const wards = await (await fetch(wardsUrl)).json();
+  // 現在時刻の時計は、データを読む前に始める(読み込みに失敗しても止めない)
+  const clocks = createClocks(document.getElementById('clocks'));
+  setInterval(() => clocks.render(null, Date.now()), 250);
+
+  const wards = await loadJson(wardsUrl);
   const wardNames = new Map(wards.features.map((f) => [f.properties.id, f.properties.name]));
   const hub = createHub();
   const positions = new Map(); // 区 -> 観測点の画面座標 {x, y}
@@ -26,7 +31,6 @@ async function main() {
   };
   const mapLayer = createMapLayer({ container: document.getElementById('map'), wards, stations, padding });
   const labels = createWardLabels(document.getElementById('fx'), stations, wardNames);
-  const clocks = createClocks(document.getElementById('clocks'));
 
   const layout = () => {
     for (const s of stations) positions.set(s.ward, mapLayer.project(s.coordinates));
@@ -38,11 +42,14 @@ async function main() {
   mapLayer.ready.then(layout);
   window.addEventListener('resize', () => mapLayer.refit());
 
-  setInterval(() => clocks.render(null, Date.now()), 250);
   window.__sapporo = { mapLayer, positions };
 }
 
 main().catch((e) => {
   console.error(e);
-  document.body.dataset.error = String(e?.message ?? e);
+  const message = String(e?.message ?? e);
+  document.body.dataset.error = message;
+  const fatal = document.getElementById('fatal');
+  fatal.textContent = `読み込みに失敗しました: ${message}`;
+  fatal.hidden = false;
 });
