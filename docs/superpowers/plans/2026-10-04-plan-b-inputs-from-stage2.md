@@ -44,12 +44,28 @@ Stellio の MQTT の通知は、ETSI の MQTT バインディングの封筒に�
 }
 ```
 
-(`temperature`、`windDirection`、`windSpeed`、`precipitation` は省略。)属性の順序は、通知ごとに変わる。
+(`temperature`、`windDirection`、`windSpeed`、`precipitation` は省略。この例は `dateObserved` を加える前のもの。いまは `dateObserved` も入る(3節)。)属性の順序は、通知ごとに変わる。
 
-## 3. `sentAt` の形
+## 3. `sentAt` と `dateObserved` の形
 
 書き込みでは `{"@type":"DateTime","@value":"…"}` を送るが、通知では `@type` が `type` に置き換わり、`{"type":"DateTime","@value":"…"}` で届く。
 `value["@value"]` を読み、`value` が文字列ならそのまま使う(`scripts/smoke/analyze.mjs` の `notificationKeys` と同じ扱い)。
+
+`dateObserved`(そのステップの観測時刻)も、同じ形で届く。`replay` は、すべての書き込みの PATCH に `dateObserved` を付ける。
+実際の live の通知(Stellio、2026-10-04。北区の正時の書き込み。`body.data[0]` から一部の属性だけを抜き出したもの):
+
+```json
+{
+  "id": "urn:ngsi-ld:WeatherObserved:sapporo-kita",
+  "type": "WeatherObserved",
+  "snowHeight": { "type": "Property", "value": 26, "unitCode": "CMT", "observedAt": "2025-11-18T03:00:00Z" },
+  "snowfall1h": { "type": "Property", "value": 2, "unitCode": "CMT", "observedAt": "2025-11-18T03:00:00Z" },
+  "dateObserved": { "type": "Property", "value": { "type": "DateTime", "@value": "2025-11-18T03:00:00Z" } },
+  "sentAt": { "type": "Property", "value": { "type": "DateTime", "@value": "2026-10-04T08:45:01.136Z" } }
+}
+```
+
+次の10分の通知では、`dateObserved` は `2025-11-18T03:10:00Z` になり、`snowfall1h` は値 2、`observedAt` `2025-11-18T03:00:00Z` のまま入っていた。
 
 ## 4. `metadata.Link`
 
@@ -64,7 +80,24 @@ Stellio の MQTT の通知は、ETSI の MQTT バインディングの封筒に�
 "snowfall1h":  { "type": "Property", "value": 0,   "unitCode": "CMT", "observedAt": "2025-11-17T17:00:00Z" }
 ```
 
-10分ごとの live の通知を、新しい降雪量として扱わない。`snowfall1h.observedAt` が、**その通知の全属性の `observedAt` の最大値**と一致するときだけ、新しい値として扱う。特定の属性(たとえば気温)の `observedAt` と比べてはいけない。気温は欠測が多く(10節)、欠測のステップでは書き込まれないため、その `observedAt` は古いまま残る。全属性の最大値なら、そのステップで書いた属性の観測時刻になる。
+10分ごとの live の通知を、新しい降雪量として扱わない。
+
+- 地図アプリの観測時刻(時計の表示)は、`dateObserved` を使う。
+- `snowfall1h` は、`snowfall1h.observedAt` が `dateObserved` と一致するとき(正時の行)だけ、新しい値として扱う。
+
+属性の `observedAt`(たとえば気温や、全属性の最大値)から観測時刻を求めてはいけない。気温は欠測が多く(10節)、欠測のステップでは書き込まれないため、その `observedAt` は古いまま残る。
+`--changed-only` で再生すると、全属性の値が前回と同じステップでは、どの属性の `observedAt` も新しくならない(実データの11月に約250か所。例: 中央区 2025-11-07T17:50:00Z)。
+その場合も、`dateObserved` は正しい観測時刻になる。Stellio で `--changed-only` で再生したときの、厚別区 2025-11-18T16:10:00Z の通知(一部の属性):
+
+```json
+"temperature":  { "type": "Property", "value": -1.6, "unitCode": "CEL", "observedAt": "2025-11-18T16:00:00Z" },
+"snowHeight":   { "type": "Property", "value": 9,    "unitCode": "CMT", "observedAt": "2025-11-18T15:30:00Z" },
+"snowfall1h":   { "type": "Property", "value": 0,    "unitCode": "CMT", "observedAt": "2025-11-18T16:00:00Z" },
+"dateObserved": { "type": "Property", "value": { "type": "DateTime", "@value": "2025-11-18T16:10:00Z" } }
+```
+
+全属性の `observedAt` の最大値は 16:00 のままで、`dateObserved` だけが 16:10 を示している。
+発表の再生では `--changed-only` を使わない(既定の、全属性を書く方式で、測定の基準を満たしている)。
 
 ## 6. setup のときの、余分な live の通知
 
@@ -82,7 +115,7 @@ Stellio の MQTT の通知は、ETSI の MQTT バインディングの封筒に�
 
 - PATCH 1回につき、live の通知は1回(live の購読は `sentAt` を監視する。設計書 4.2)。HUD の「通知レート」は、Stellio では書き込みのレートと同じになる。
 - 1ステップの10件の書き込みは、`interval / 10` ずつ散らして書かれる(既定の 6,000ms なら 600ms ごと。設計書 4.3)。
-- Stellio は、通知1件に約 0.4〜0.5 秒(観測した処理速度、毎秒 約 2.1〜2.4 件からの換算)かかる。正時に条件を満たす区があると、その書き込みで通知が3件になり、後続の通知が待たされる。128 ステップの通しで、遅延の中央値は約 0.39 秒、p95 は 0.54〜0.59 秒、最大は約 1.9 秒だった。
+- Stellio は、通知1件に約 0.4〜0.5 秒(観測した処理速度、毎秒 約 2.1〜2.4 件からの換算)かかる。正時に条件を満たす区があると、その書き込みで通知が3件になり、後続の通知が待たされる。128 ステップの通しで、遅延の中央値は約 0.39 秒、p95 は 0.54〜0.59 秒、最大は約 1.9 秒だった。`dateObserved` を加えたあとの1回の測定では、中央値 0.38 秒、p95 0.81 秒、最大 1.98 秒だった。
 
 ## 9. トピックと接続先
 
