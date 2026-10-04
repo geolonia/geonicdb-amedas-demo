@@ -8,6 +8,7 @@ import { readConfig } from './lib/config.js';
 import { createHub } from './lib/hub.js';
 import { createWardStore } from './lib/store.js';
 import { createStats } from './lib/stats.js';
+import { safely } from './lib/safely.js';
 import { createHitDeduper } from './lib/dedupe.js';
 import { legendGradientCss } from './lib/color.js';
 import { createMapLayer } from './map-layer.js';
@@ -81,15 +82,23 @@ async function main() {
   }
 
   const debugLog = config.debug ? [] : null;
-  connectFeed({
-    url: config.mqttUrl,
-    wardIds,
-    debugLog,
-    onStatus: (s) => hud.setStatus(s),
-    onObservations: (list) => {
-      for (const obs of list) handle(obs);
-    },
-  });
+  // 1件の処理が失敗しても、次の1件へ進む(mqtt.js のコールバックへ例外を届けない)
+  const onError = (e) => console.error('通知の処理に失敗しました', e);
+  try {
+    connectFeed({
+      url: config.mqttUrl,
+      wardIds,
+      debugLog,
+      onStatus: (s) => hud.setStatus(s),
+      onObservations: (list) => {
+        for (const obs of list) safely(() => handle(obs), onError);
+      },
+    });
+  } catch (e) {
+    // 接続の失敗でアプリを止めない(HUD と演出は動かす)
+    console.error('MQTT の開始に失敗しました', e);
+    hud.setStatus('error');
+  }
 
   // HUD は 4回/秒で描き直す(通知ごとには描かない。時計は上の setInterval)
   setInterval(() => {
