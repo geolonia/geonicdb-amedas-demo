@@ -40,7 +40,7 @@ PostgreSQL が接続を受け付ける前に、データベースの移行(Flywa
 
 ### 再生の速度
 
-Stellio は、書き込んだ属性1つにつき1件の通知を出します。この環境で観測した通知の処理速度は、毎秒 約 2.1〜2.4 件(1件あたり約 0.45 秒)で、CPU には余裕がありました(原因は調べていません)。
+Stellio は、書き込んだ属性1つにつき1件の通知を出します。通知1件あたり、約 0.4〜0.5 秒(観測した処理速度、毎秒 約 2.1〜2.4 件からの換算)かかり、CPU には余裕がありました(原因は調べていません)。
 そのため、このデモは次の2つで通知の数と集中を抑えています。
 
 - 全件の購読(`amedas/live`)は `sentAt` だけを監視します。`replay` は書き込みごとに `sentAt` を更新するので、PATCH 1回につき通知は1回です(通知には全属性が入ります)。
@@ -66,6 +66,10 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 
 次の環境変数(または引数)で、接続先を変えます。
 
+- 別のブローカーだけを使うときは、`docker compose -f compose/docker-compose.yml up -d mosquitto context` で、MQTT と `@context` の配信だけを起動できます。
+  その場合、`CONTEXT` は、`http://127.0.0.1:8081/weather.jsonld` のように、そのブローカーから見える URL にします。
+- `setup` と `replay` は、同じ `--from` で実行します(`replay` は、エンティティにある属性を `--from` から再現するため)。
+
 | 環境変数 | 引数 | 既定値(Stellio の compose 用) | 内容 |
 |---|---|---|---|
 | `BROKER_URL` | `--broker-url` | `http://localhost:8080` | ブローカーの URL(`/ngsi-ld/v1` の手前まで) |
@@ -76,6 +80,7 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 | `REPLAY_FROM` | `--from` | `2025-11-18T02:50:00+09:00` | 再生の開始日時 |
 | `REPLAY_TO` | `--to` | `2025-11-19T00:00:00+09:00` | 再生の終了日時 |
 | `REPLAY_INTERVAL_MS` | `--interval` | `6000` | 1ステップ(観測の10分)に当てるミリ秒 |
+| `REPLAY_REQUEST_TIMEOUT_MS` | `--request-timeout` | `10000` | ブローカーへの1回の HTTP 要求のタイムアウト(ミリ秒) |
 | `DATA_DIR` | `--data-dir` | `data` | 観測データのディレクトリ |
 | なし | `--log` | なし | `replay` の書き込みを1行1件の JSON で記録するファイル |
 | なし | `--changed-only` | なし(全属性を書く) | 前回と同じ値の属性を書かない(`snowfall1h` と `sentAt` は常に書く) |
