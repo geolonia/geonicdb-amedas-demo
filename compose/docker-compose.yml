@@ -1,0 +1,25 @@
+# 使い方(リポジトリのルートから): docker compose -f compose/docker-compose.yml up -d
+# Stellio は、初回の起動で一部のサービスが終了することがある。その場合は、同じコマンドをもう一度実行する。
+name: sapporo-snow-timelapse
+
+include:
+  - path: ./stellio/docker-compose.yml
+    env_file: ./stellio/stellio.env
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "127.0.0.1:1883:1883"
+      - "127.0.0.1:9001:9001"
+
+  # Stellio は、@context を URL でしか受け付けない。コンテナの中から http://context/weather.jsonld で取れるようにする。
+  context:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./context/weather.jsonld:/usr/share/nginx/html/weather.jsonld:ro
+      - ./context/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:8081:80"
