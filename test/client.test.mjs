@@ -70,7 +70,15 @@ test('リクエストには AbortSignal(タイムアウト)を渡す', async () 
 test('応答しない fetch は、timeoutMs 経過後に reject される', async () => {
   const fetchImpl = (url, init) =>
     new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason)));
-  await assert.rejects(createClient({ ...base, timeoutMs: 20, fetchImpl }).deleteEntity('urn:a'));
+  // AbortSignal.timeout のタイマーはイベントループを保持しない(Node 22 では、ほかに何も動いていないと、
+  // 待っている Promise ごとループが終わってテストが中断される)。実際の通信では fetch 自体がループを保持するため、
+  // テストでは、保持するタイマーを明示的に置く。
+  const keepAlive = setTimeout(() => {}, 5000);
+  try {
+    await assert.rejects(createClient({ ...base, timeoutMs: 20, fetchImpl }).deleteEntity('urn:a'), { name: 'TimeoutError' });
+  } finally {
+    clearTimeout(keepAlive);
+  }
 });
 
 test('購読の一覧: 本文が JSON でない 200 では json は null', async () => {
