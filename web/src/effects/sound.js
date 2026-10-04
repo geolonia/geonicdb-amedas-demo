@@ -2,12 +2,18 @@
 // ブラウザーは、利用者の操作なしでは音を出さない。発表の冒頭に「音を有効化」を1回押す(ページを読み直したら、また押す)。
 // 同じ書き込みの ge3 と ge5 が続けて届いたとき(封筒のないブローカーでは順不同)に二度鳴らさないよう、
 // 最初の通知から 200ms 待って、その時点の強い方で1回だけ鳴らす(画面の演出は待たない)。
+// 大量の通知や隠れたタブで溜まらないよう、master の音量・間引き・同時数の上限・鮮度の確認・タブの表示の確認を入れる(lib/sound-gate.js)。
+import { isFresh, createChimeLimiter } from '../lib/sound-gate.js';
+
 const SETTLE_MS = 200;
 
 export function installSound(app) {
   let ctx = null;
+  let master = null;
   let on = false;
-  const pending = new Map(); // hit.key -> tier
+  const limiter = createChimeLimiter();
+  const pending = new Map(); // hit.key -> { tier, receivedAt }
+  const visible = () => document.visibilityState === 'visible';
 
   function chime(tier) {
     if (!ctx || ctx.state !== 'running') return;
@@ -22,38 +28,56 @@ export function installSound(app) {
       gain.gain.setValueAtTime(0, start);
       gain.gain.linearRampToValueAtTime(0.18, start + 0.01);
       gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.7);
-      osc.connect(gain).connect(ctx.destination);
+      osc.connect(gain).connect(master);
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
       osc.start(start);
       osc.stop(start + 0.75);
     });
     app.soundPlays = (app.soundPlays ?? 0) + 1;
   }
 
+  const label = () => (on ? `音: オン(${ctx.state})` : ctx && ctx.state !== 'running' ? `音: オフ(${ctx.state}。もう一度押す)` : '音: オフ');
+
   app.controls?.addButton('音を有効化(クリックが必要)', async (button) => {
     try {
-      ctx = ctx ?? new AudioContext();
-      if (ctx.state !== 'running') {
-        await ctx.resume();
-        on = true;
+      if (on) {
+        on = false;
       } else {
-        on = !on;
+        if (!ctx) {
+          ctx = new AudioContext();
+          master = ctx.createGain();
+          master.gain.value = 0.3;
+          master.connect(ctx.destination);
+        }
+        if (ctx.state !== 'running') await ctx.resume();
+        on = ctx.state === 'running'; // 再生できない状態(suspended など)のままなら、オンにしない
       }
-      button.textContent = on ? `音: オン(${ctx.state})` : '音: オフ';
+      button.textContent = label();
       if (on) chime('ge3');
     } catch (e) {
+      on = false;
       console.warn('音を有効にできません', e);
       button.textContent = '音: 使えません';
     }
   });
 
-  app.on('hit', (hit) => {
-    if (!on) return;
+  app.on('hit', (hit, obs) => {
+    if (!on || !visible()) return;
     const known = pending.get(hit.key);
-    pending.set(hit.key, hit.tier === 'ge5' || known === 'ge5' ? 'ge5' : 'ge3');
+    const tier = hit.tier === 'ge5' || known?.tier === 'ge5' ? 'ge5' : 'ge3';
+    pending.set(hit.key, { tier, receivedAt: known?.receivedAt ?? obs?.receivedAt ?? Date.now() });
     if (known !== undefined) return;
     setTimeout(() => {
-      chime(pending.get(hit.key));
-      pending.delete(hit.key);
+      const p = pending.get(hit.key);
+      try {
+        // 待っている間にオフ・タブが隠れた、または古くなっていたら鳴らさない
+        if (on && visible() && isFresh(p.receivedAt, Date.now()) && limiter.admit(p.tier, Date.now())) chime(p.tier);
+      } finally {
+        pending.delete(hit.key);
+      }
     }, SETTLE_MS);
   });
 }
