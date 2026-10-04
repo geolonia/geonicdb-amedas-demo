@@ -121,3 +121,72 @@ test('write が例外を投げても、失敗として数える(プロセスを�
   const write = async () => { throw new Error('ECONNREFUSED'); };
   await assert.rejects(() => runReplay({ steps: steps(10), intervalMs: 10, write, ...clock }), /連続 5 回/);
 });
+
+test('ステップの途中で大きく止まったら(3 × intervalMs 超)、その書き込みの枠で警告して予定をずらし、残りの区を一度に書かない', async () => {
+  const clock = fakeClock();
+  const calls = [];
+  const warns = [];
+  let stalled = false;
+  const write = async (ward, obs) => {
+    calls.push([ward + obs.t, clock.now()]);
+    if (!stalled && ward === 'b') { stalled = true; clock.advance(30_000); } // ステップ0の b の書き込みが 30 秒止まる
+    return true;
+  };
+  await runReplay({ steps: steps(2, ['a', 'b', 'c', 'd']), intervalMs: 6000, write, onWarn: (m) => warns.push(m), ...clock });
+  // c は予定 1_003_000 に対して 1_031_500(28,500ms 遅れ)。そこを「今」として、残りは元の間隔(区は 1,500ms、ステップは 6,000ms)で書く。
+  assert.deepEqual(calls, [
+    ['at0', 1_000_000], ['bt0', 1_001_500], ['ct0', 1_031_500], ['dt0', 1_033_000],
+    ['at1', 1_034_500], ['bt1', 1_036_000], ['ct1', 1_037_500], ['dt1', 1_039_000],
+  ]);
+  assert.equal(warns.filter((m) => /ずらし/.test(m)).length, 1);
+  assert.ok(warns.some((m) => /28500ms/.test(m)));
+});
+
+test('ステップの途中の小さな遅れ(3 × intervalMs 以下)では、予定をずらさない', async () => {
+  const clock = fakeClock();
+  const calls = [];
+  const warns = [];
+  let stalled = false;
+  const write = async (ward, obs) => {
+    calls.push([ward + obs.t, clock.now()]);
+    if (!stalled && ward === 'b') { stalled = true; clock.advance(4000); }
+    return true;
+  };
+  await runReplay({ steps: steps(2, ['a', 'b', 'c', 'd']), intervalMs: 6000, write, onWarn: (m) => warns.push(m), ...clock });
+  assert.deepEqual(calls, [
+    ['at0', 1_000_000], ['bt0', 1_001_500], ['ct0', 1_005_500], ['dt0', 1_005_500],
+    ['at1', 1_006_000], ['bt1', 1_007_500], ['ct1', 1_009_000], ['dt1', 1_010_500],
+  ]);
+  assert.equal(warns.filter((m) => /ずらし/.test(m)).length, 0);
+});
+
+test('書き込みが 0 件や 1 件のステップも、ステップの間隔を保って再生する', async () => {
+  const clock = fakeClock();
+  const calls = [];
+  const s = [
+    { t: 't0', writes: [{ ward: 'a', obs: { t: 't0' } }] },
+    { t: 't1', writes: [] },
+    { t: 't2', writes: [{ ward: 'a', obs: { t: 't2' } }] },
+  ];
+  const write = async (ward, obs) => { calls.push([obs.t, clock.now()]); clock.advance(100); return true; };
+  const seen = [];
+  const stats = await runReplay({ steps: s, intervalMs: 1000, write, onStep: ({ index }) => seen.push([index, clock.now()]), ...clock });
+  assert.deepEqual(calls, [['t0', 1_000_000], ['t2', 1_002_000]]);
+  assert.deepEqual(seen.map((x) => x[0]), [0, 1, 2]);
+  assert.equal(seen[1][1], 1_001_000);
+  assert.deepEqual(stats, { writes: 2, failed: 0, steps: 3 });
+});
+
+test('既定の時計は単調な時計(壁時計の変更で、待ち時間が変わらない)', async () => {
+  const realNow = Date.now;
+  let wall = realNow();
+  Date.now = () => (wall -= 3_600_000); // 呼ぶたびに壁時計が 1 時間戻る
+  const sleeps = [];
+  try {
+    await runReplay({ steps: steps(3), intervalMs: 20, write: async () => true, sleep: async (ms) => { sleeps.push(ms); } });
+  } finally {
+    Date.now = realNow;
+  }
+  // 偽の sleep は時刻を進めないので、待ち時間は再生の長さ(3 ステップ × 20ms)までになる。壁時計を使うと、約 1 時間になる。
+  assert.ok(sleeps.every((ms) => ms <= 60), `待ち時間: ${sleeps}`);
+});
