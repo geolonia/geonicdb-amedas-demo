@@ -1275,7 +1275,7 @@ git commit -m "feat: 購読通知の正規化(封筒あり・なし、DateTime �
 
 **Interfaces:**
 - Consumes: `Observation`(Task 3)、`observation(...)`(`test/web/helpers.mjs`)
-- Produces: `createHitDeduper({ maxKeys = 500, repeatAfterMs = 60000 }) → { offer(obs) → Decision, size() → number }`(時刻は `obs.receivedAt`)。`nextHitOrder(keys, decision, max = 8) → { keys, removed }`(ヒット欄の行の並び。Task 11 が使う)。`Decision` は次のどれか:
+- Produces: `createHitDeduper({ maxKeys = 500, repeatAfterMs = 60000 }) → { offer(obs) → Decision, size() → number }`(時刻は `obs.receivedAt`)。`nextHitOrder(keys, decision, max = 8) → { keys, removed }`(ヒット欄の行の並び。Task 11 が使う。弱い方の行が上限から押し出されたあとに届いた upgrade は、show と同じに先頭へ出す)。`Decision` は次のどれか:
   - `{ action: 'show', key, tier: 'ge5' | 'ge3', ward, value }`(初めてのヒット。または、最初の通知から `repeatAfterMs` より後に届いた同じヒット = setup をやり直した再生)
   - `{ action: 'upgrade', key, tier: 'ge5', ward, value }`(弱い方を出したあとに強い方が届いた)
   - `{ action: 'ignore', reason: 'not-conditional' | 'no-snowfall' | 'stale' | 'weaker-or-same', key? }`
@@ -1401,6 +1401,17 @@ test('nextHitOrder: 新しいヒットは先頭、上限を超えた分と、や
   // upgrade は並びを変えない
   assert.deepEqual(nextHitOrder(['b', 'c'], { action: 'upgrade', key: 'c' }, 2), { keys: ['b', 'c'], removed: [] });
 });
+
+test('nextHitOrder: 弱い方の行が押し出されたあとの upgrade は、先頭に出し直す', () => {
+  let keys = [];
+  keys = nextHitOrder(keys, { action: 'show', key: 'w' }, 8).keys;
+  for (let i = 0; i < 8; i++) keys = nextHitOrder(keys, { action: 'show', key: `k${i}` }, 8).keys;
+  assert.equal(keys.includes('w'), false);
+  const r = nextHitOrder(keys, { action: 'upgrade', key: 'w' }, 8);
+  assert.equal(r.keys[0], 'w');
+  assert.equal(r.keys.length, 8);
+  assert.deepEqual(r.removed, ['k0']);
+});
 ```
 
 - [ ] **Step 2: テストを実行して失敗を確認する**
@@ -1460,9 +1471,11 @@ export function createHitDeduper({ maxKeys = 500, repeatAfterMs = 60_000 } = {})
 
 // ヒット欄の行の並び(新しいものが先頭、最大 max 件)。keys: いまの並び(キーの配列)。
 // show: 同じキーの古い行があれば消して、先頭に出す(setup をやり直した再生)。upgrade: 並びは変えない(行を書き換える)。
+// ただし、弱い方の行が上限から押し出されたあとに upgrade が届いたときは、show と同じに扱う(行を作り直して先頭に出す)。
 // 戻り値: { keys: 新しい並び, removed: 消すキーの配列 }
 export function nextHitOrder(keys, decision, max = 8) {
-  if (decision.action !== 'show') return { keys, removed: [] };
+  const asShow = decision.action === 'show' || (decision.action === 'upgrade' && !keys.includes(decision.key));
+  if (!asShow) return { keys, removed: [] };
   const rest = keys.filter((k) => k !== decision.key);
   const next = [decision.key, ...rest];
   const removed = [...(rest.length < keys.length ? [decision.key] : []), ...next.slice(max)];
@@ -1476,7 +1489,7 @@ export function nextHitOrder(keys, decision, max = 8) {
 node --test test/web/dedupe.test.mjs && npx -y node@22 --test test/web/dedupe.test.mjs && npm run lint
 ```
 
-期待: どちらの Node でも 11件とも PASS。
+期待: どちらの Node でも 12件とも PASS。
 
 - [ ] **Step 5: コミット**
 
@@ -3599,7 +3612,7 @@ npm run fake-notify -- --from 2025-11-18T15:50:00+09:00 --to 2025-11-18T16:00:00
 2. 境界線を消して、拡大した表示: `browser_evaluate` → `() => { const m = window.__sapporo.app.mapLayer.map; m.setPaintProperty('ward-line', 'line-opacity', 0); m.jumpTo({ center: [141.36, 43.10], zoom: m.getZoom() + 3 }); }`、少し待ってから `browser_take_screenshot`(`filename: .playwright-mcp/seam-zoom.png`、`scale: device`)。
 
 判定:
-- 1 で、隣り合う区の間に、背景の色(`#070d18`、ほぼ黒)の線や点が見えない → すき間はない(2 で細い線が見えても、境界線が覆っている)。Step 2 は不要。判定の結果を、Step 3 のコミットのメッセージに書く。
+- 1 で、隣り合う区の間に、背景の色(`#070d18`、ほぼ黒)の線や点が見えない → すき間はない(2 で細い線が見えても、境界線が覆っている)。Step 2 は不要。判定の結果を、Step 5 のコミットのメッセージに書く。
 - 1 で、背景の色の線や点が見える → Step 2 の修正を入れる。
 - 2 で、境界線を消しても線が見えない → 丸めによるすき間はない(記録だけ)。
 
@@ -3619,14 +3632,24 @@ Step 1 の 1 をもう一度撮り、線や点が消えたことを確かめる�
 
 Task 12 までの画面を 1280 × 720 で開くと、左右のパネルが余白を取り(`padding()` が左に約 448px、右に約 512px)、地図の幅が約 320px しかなく、南区、豊平区、白石区のラベルが重なる(計画のレビューで確認)。次の2つを固定の手順として入れる。
 
-`web/src/style.css` の末尾に足す(幅 1400px 以下で、パネルを細くし、文字を少し小さくする):
+`web/src/style.css` の末尾に足す(幅 1400px 以下で、右の欄を 400px から 320px に、左のパネルを細くし、文字を少し小さくする。ヒット欄の行は 12px にして、最長の行(例: 「22:28:05.875 観測 15:00 手稲区 5cm/h(5cm 以上)」)が末尾まで1行に収まるようにする。300px では「(3c…」のように強さの文字が切れた。320px で、1280 × 720 と 1366 × 768 の実測で約 10px の余裕があった):
 
 ```css
 /* ---- 1280 × 720 まで(Task 13) ---- */
 /* 会場の解像度の下限は 1280 × 720。パネルを細くして、地図の幅を確保する */
 @media (max-width: 1400px) {
   #side {
-    width: 300px;
+    width: 320px;
+  }
+
+  /* ヒット欄の最長の行(例: 「…観測 15:00 厚別区 4cm/h(3cm 以上)」)が、末尾まで1行に収まるようにする */
+  #hits li {
+    font-size: 12px;
+  }
+
+  #hits li time {
+    margin-right: 6px;
+    font-size: 11px;
   }
 
   #clocks,
@@ -3653,12 +3676,13 @@ Task 12 までの画面を 1280 × 720 で開くと、左右のパネルが余�
 
 余白は、観測点の点の位置にかかる。ラベルは点を中心に左右へ約 35〜45px 広がるため、+24 では端の区(手稲区、厚別区)のラベルの半分がパネルに隠れた(2026-10-04 に 1280 × 720 で確認)。+60 で、隠れず、地図の幅も足りた。
 
-この2つを入れても、1280 × 720 では南区と豊平区のラベルが 1px 重なった(観測点が近い)。`web/src/labels.js` に、区ごとのずらしを足す。`export function createWardLabels(` の直前に足す:
+この2つを入れても、1280 × 720 では南区と豊平区のラベルが重なった(観測点が近い。気温が「-10.5℃」のような最も長い表示のとき 10.5px)。`web/src/labels.js` に、区ごとのずらしを足す。南区のラベルを、豊平区のラベルの下端より下へずらす(南区の南は、地図の端で空いている)。`export function createWardLabels(` の直前に足す:
 
 ```js
 // 1280 × 720 で重なる区だけ、ラベルをずらす(px。x は負が左、y は負が上)。
-// 2026-10-04 の確認では、南区と豊平区のラベルが 1px 重なった(観測点が近い)。
-const LABEL_OFFSET = Object.freeze({ minami: { x: -8, y: 0 } });
+// 2026-10-04 の確認では、南区と豊平区のラベルが重なった(観測点が近い。気温が「-10.5℃」のような最も長い表示で 10.5px)。
+// 南区のラベルを、豊平区のラベルの下端より下へずらす(南区の南は、地図の端で空いている)。
+const LABEL_OFFSET = Object.freeze({ minami: { x: 0, y: 26 } });
 ```
 
 `layout` の中の1行:
@@ -3682,8 +3706,9 @@ const LABEL_OFFSET = Object.freeze({ minami: { x: -8, y: 0 } });
 import { formatSnowDepth, formatTemperature, temperatureClass } from './lib/format.js';
 
 // 1280 × 720 で重なる区だけ、ラベルをずらす(px。x は負が左、y は負が上)。
-// 2026-10-04 の確認では、南区と豊平区のラベルが 1px 重なった(観測点が近い)。
-const LABEL_OFFSET = Object.freeze({ minami: { x: -8, y: 0 } });
+// 2026-10-04 の確認では、南区と豊平区のラベルが重なった(観測点が近い。気温が「-10.5℃」のような最も長い表示で 10.5px)。
+// 南区のラベルを、豊平区のラベルの下端より下へずらす(南区の南は、地図の端で空いている)。
+const LABEL_OFFSET = Object.freeze({ minami: { x: 0, y: 26 } });
 
 export function createWardLabels(layer, stations, wardNames) {
   const labels = new Map();
@@ -3724,33 +3749,70 @@ export function createWardLabels(layer, stations, wardNames) {
 }
 ```
 
-- [ ] **Step 4: 1280 × 720 と 1920 × 1080 で確かめる**
+- [ ] **Step 4: 1280 × 720、1366 × 768、1920 × 1080 で確かめる**
 
 ```bash
 npm run lint && npm run web:build && npm run web:preview
 ```
 
-解像度ごとに(`browser_resize` を 1280 × 720、1920 × 1080 の順に)、`browser_navigate` → `http://127.0.0.1:4173/?live=off`、別の端末で `npm run fake-notify -- --from 2025-11-18T15:50:00+09:00 --to 2025-11-18T16:00:00+09:00 --interval 500 --gap 0`(16:00 は北区 35cm、西区のヒットあり)、`browser_take_screenshot`(`filename: .playwright-mcp/res-<幅>.png`)と、次の `browser_evaluate`:
+解像度ごとに(`browser_resize` を 1280 × 720、1366 × 768、1920 × 1080 の順に)、`browser_navigate` → `http://127.0.0.1:4173/?live=off`、別の端末でピーク時を流す(ヒット欄に、最長の行を含む 8 行がそろう。16:00 は北区 35cm):
+
+```bash
+npm run fake-notify -- --from 2025-11-18T13:50:00+09:00 --to 2025-11-18T16:00:00+09:00 --interval 300 --gap 0
+```
+
+`browser_take_screenshot`(`filename: .playwright-mcp/res-<幅>.png`)を撮ってから、次の `browser_evaluate` を実行する。ラベルの重なりは、いまの表示(`now`)と、最も長い表示(`worst`: すべての区を「35cm」「-10.5℃」に書き換えたもの)の両方で確かめる(書き換えは表示だけで、次の通知で元に戻る):
 
 ```js
 () => {
   const r = (el) => el.getBoundingClientRect();
-  const labels = [...document.querySelectorAll('.ward-label')].map((el) => ({ ward: el.dataset.ward, ...r(el).toJSON() }));
-  const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-  const pairs = [];
-  for (let i = 0; i < labels.length; i++) for (let j = i + 1; j < labels.length; j++) if (overlap(labels[i], labels[j])) pairs.push(`${labels[i].ward}-${labels[j].ward}`);
-  const panels = ['clocks', 'hud', 'side', 'controls', 'legend'].map((id) => r(document.getElementById(id)));
-  const hidden = labels.filter((l) => panels.some((p) => overlap(l, p))).map((l) => l.ward);
+  const check = () => {
+    const labels = [...document.querySelectorAll('.ward-label')].map((el) => ({ ward: el.dataset.ward, ...r(el).toJSON() }));
+    const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    const pairs = [];
+    for (let i = 0; i < labels.length; i++) for (let j = i + 1; j < labels.length; j++) if (overlap(labels[i], labels[j])) pairs.push(`${labels[i].ward}-${labels[j].ward}`);
+    const panels = ['clocks', 'hud', 'side', 'controls', 'legend'].map((id) => r(document.getElementById(id)));
+    const hidden = labels.filter((l) => panels.some((p) => overlap(l, p))).map((l) => l.ward);
+    const atsubetsu = labels.find((l) => l.ward === 'atsubetsu');
+    return { pairs, hidden, atsubetsuToSide: Math.round(r(document.getElementById('side')).left - atsubetsu.right) };
+  };
   const attr = document.getElementById('attribution');
-  return { pairs, hidden, attributionCut: attr.scrollWidth > attr.clientWidth, titleGap: r(document.getElementById('side')).left - r(document.getElementById('title')).right };
+  const lis = [...document.querySelectorAll('#hits li')];
+  const slack = lis.map((li) => {
+    const range = document.createRange();
+    range.selectNodeContents(li);
+    return Math.round(li.clientWidth - range.getBoundingClientRect().width);
+  });
+  const now = check();
+  for (const el of document.querySelectorAll('.ward-label .snow')) el.textContent = '35cm';
+  for (const el of document.querySelectorAll('.ward-label .temp')) el.textContent = '-10.5℃';
+  const worst = check();
+  return {
+    now,
+    worst,
+    hitRows: lis.length,
+    hitCut: lis.some((li) => li.scrollWidth > li.clientWidth),
+    hitSlack: Math.min(...slack),
+    attributionCut: attr.scrollWidth > attr.clientWidth,
+    titleGap: Math.round(r(document.getElementById('side')).left - r(document.getElementById('title')).right),
+  };
 }
 ```
 
-期待(どちらの解像度でも): `pairs` と `hidden` が空(ラベルが重ならず、パネルに隠れない。南区の南側の面が切れるのはよい。設計書 5.5)、`attributionCut` が false(出典が切れない)、`titleGap` が 8 以上(タイトルの右端が右の欄に接しない)。スクリーンショットでは、北区(35cm、最も明るい色)の上のラベルの白い文字が読める。2026-10-04 の確認(Step 3 のすべてを入れた状態)では、1280 × 720 で `pairs` と `hidden` は空、`titleGap` は約 88px、出典は1行に収まった。1920 × 1080 でも `pairs` と `hidden` は空、`titleGap` は約 308px だった。
+期待(3つの解像度のすべてで): `now` と `worst` の `pairs` と `hidden` が空(ラベルが重ならず、パネルに隠れない。南区の南側の面が切れるのはよい。設計書 5.5)、`atsubetsuToSide` が 0 より大きい(厚別区のラベルと右の欄の間が空いている)、`hitRows` が 8、`hitCut` が false(ヒット欄の行の末尾が「…」で切れない)、`hitSlack` が 0 以上、`attributionCut` が false(出典が切れない)、`titleGap` が 8 以上(タイトルの右端が右の欄に接しない)。スクリーンショットでは、北区(35cm、最も明るい色)の上のラベルの白い文字が読める。
+
+2026-10-04 の確認(Step 3 のすべてを入れた状態):
+
+| 解像度 | `pairs`、`hidden`(now / worst) | `atsubetsuToSide`(now / worst) | `hitCut` | `hitSlack` | `attributionCut` | `titleGap` |
+|---|---|---|---|---|---|---|
+| 1280 × 720 | 空 / 空 | 20 / 13 | false | 約 10px | false | 69 |
+| 1366 × 768 | 空 / 空 | 20 / 13 | false | 10px | false | 112 |
+| 1920 × 1080 | 空 / 空 | 17 / 10 | false | 52px | false | 309 |
 
 外れた場合の直し方:
-- `pairs` が空でない → Step 3 の `LABEL_OFFSET` に、重なった組の一方の区を足す。横に数 px ずらして離れるなら `x`、離れなければ、下側の区を `y` で下へ(1行の高さ 約 34px を目安に)。足したら、この Step をやり直す。
+- `pairs`(now か worst)が空でない → Step 3 の `LABEL_OFFSET` に、重なった組の一方の区を足す。横に数 px ずらして離れるなら `x`、離れなければ、下側の区を `y` で下へ(1行の高さ 約 34px を目安に)。足したら、この Step をやり直す。
 
+- `hitCut` が true → Step 3 の `@media` の `#side` の幅を 20px ずつ広げ、ラベルの確認(`hidden`、`atsubetsuToSide`)もやり直す。
 - `titleGap` が 8 より小さい → Step 3 の `@media` の中に `#title small { display: none; }` を足す(副題を消して、タイトルを短くする)。
 - `attributionCut` が true → `#attribution` の `white-space: nowrap;` を消して2行にする。
 
@@ -4152,7 +4214,7 @@ npm run fake-notify -- --bare --order weak-first    # 封筒のない形、弱�
    ▼
 data/(区ごとの観測値、観測地点、区の境界)
    │ npm run setup: 10区のエンティティを作り、購読を3本登録する
-   │ npm run replay: 時計に合わせて、10区を1件ずつ順に PATCH する(区の間も並列にしない)
+   │ npm run replay: 時計に合わせて、1区ずつ順に書き込む(区の間も並列にしない)
    ▼
 NGSI-LD ブローカー
    │ 購読通知(MQTT、QoS 0)
@@ -4760,7 +4822,7 @@ node scripts/smoke/compare-browser.mjs ~/sapporo-e2e/replay.jsonl ~/sapporo-e2e/
 
 本番機(発表で使うノート PC)で、次を順に確かめる。発表当日のブローカーで行う場合は、そのブローカーの WebSocket を `?mqtt=` で、書き込み先を `BROKER_URL` などの環境変数で指定する(README「別のブローカーで動かすとき」)。地図アプリの側に、ブローカーごとの設定はない。
 
-1. **プロジェクターの解像度**: 会場のプロジェクター(不明なら 1920 × 1080 と 1280 × 720 の両方)にミラーリングして、Task 13 Step 3 の確認項目(ラベルが隠れない、北区の上で文字が読める、タイトルと出典が見える)を、実際の画面で見る。
+1. **プロジェクターの解像度**: 会場のプロジェクター(不明なら 1920 × 1080 と 1280 × 720 の両方)にミラーリングして、Task 13 Step 4 の確認項目(ラベルが重ならず隠れない、ヒット欄の行が切れない、北区の上で文字が読める、タイトルと出典が見える)を、実際の画面で見る。
 2. **Retina(DPR 2)**: 本番機の内蔵ディスプレイで開き、`browser_evaluate` か開発者ツールで `devicePixelRatio` が 2、`document.getElementById('snow').width` が `innerWidth × 1.5` であることを確かめる(雪の粒を入れた場合)。アクティビティモニタで、ブラウザー(GPU とレンダラー)と Docker の CPU を、ピーク時(15:00 前後)に記録する。
 3. **1時間の連続運転**: `npm run setup -- --from 2025-11-15T00:00:00+09:00` と `npm run replay -- --from 2025-11-15T00:00:00+09:00 --to 2025-11-19T04:00:00+09:00`(601 ステップ、6,000ms/ステップで約 60 分)。開始時と終了時に、開発者ツールの Memory(または `performance.memory.usedJSHeapSize`)と、アクティビティモニタのメモリを記録し、増え続けていないこと、HUD の遅延の p95 が 2 秒以下のままであること、`compare-browser.mjs` で欠落 0 件、重複 0 件を確かめる(`--log` を付けて実行する)。
 4. **音**: 会場のスピーカーにつないで、「音を有効化」を押す手順を、発表の最初の段取りに入れる(ページを読み直すと、もう一度押す必要がある)。音量と聞こえ方を確かめる。
@@ -4792,7 +4854,7 @@ node scripts/smoke/compare-browser.mjs ~/sapporo-e2e/replay.jsonl ~/sapporo-e2e/
 | 5.5 設定(`?mqtt=`、表示範囲) | Task 2、9、13(パネルを避けた表示範囲) |
 | 5.6 検証(純関数の単体テスト、Playwright、受信数の突き合わせ、実機) | Task 2〜7、16(単体)、Task 9〜18(Playwright)、Task 19 Step 3(`?debug` と突き合わせ)、Step 4(実機) |
 | 6.1 テストの層(画面は手動、スクリーンショットは入れない、発表前の通し) | Task 9〜19、Task 19 Step 4 |
-| 6.3 出典(画面に常時表示、気象庁) | Task 1、14、15 Step 3 |
+| 6.3 出典(画面に常時表示、気象庁) | Task 1、14、15 Step 4 |
 | 6.4 README | 1〜3、5、6 は計画A で入れた(何を見せるか、動かし方、再生の速度、出典とライセンス、別のブローカー)。4「仕組み」と、地図アプリの節は Task 15 で足す |
 | 6.5 CI(lint は計画Bで入れる、SHA のピン留め) | Task 1 Step 6〜8 |
 | 7 工程3〜4、7.1 優先度 | 必須 = Task 1〜11(ゲート D)、次点 = Task 12〜15(ゲート E)、余裕 = Task 16〜18(ゲート F)、工程4 = Task 14、15、19(ゲート G) |
@@ -4806,5 +4868,5 @@ node scripts/smoke/compare-browser.mjs ~/sapporo-e2e/replay.jsonl ~/sapporo-e2e/
 
 **計画を書いたときに確かめたこと(2026-10-04)**
 - `npm view`: vite 8.3.2、maplibre-gl 6.12.0、mqtt 5.16.0、eslint 10.12.0、@eslint/js 10.0.1、globals 17.13.0。
-- 使い捨ての場所で、Vite 8.3.2 + MapLibre 6.12.0 + mqtt.js 5.16.0 のアプリをビルドし、`vite preview` と `vite`(開発サーバー)の両方で、地図の描画(Worker を含む)、Mosquitto への WebSocket の接続と受信、`data/` の import を確かめた。この計画のすべての `web/`、`scripts/`、`test/` のファイルを、この計画の本文と同じ内容で置き、`npm run lint`、`npm test`(Node 24 と、`npx -y node@22`。既存の 124 件を含めて 215 件)、`npm run web:build` が通ること、fake-notify(封筒あり・なし、3つの順序)で、HUD、時計、波紋、ヒット欄、通知ログ、当日の最新値(実際の気象庁の取得)、雪の粒、円表示、音のボタンが動くことを、Playwright で確かめた。Task 9 と Task 10 の段階の main.js も、それぞれビルドと lint が通ることを確かめた。Task 13 の 1280 × 720 の調整(`@media`、余白 +60、南区のラベルのずらし)は、1280 × 720 と 1920 × 1080 のスクリーンショットで、ラベルが重ならず、パネルに隠れず、出典が切れないことを確かめた(+24 では手稲区と厚別区のラベルの半分がパネルに隠れたため、+60 にした)。Task 11 Step 5 の「やり直した再生」(60 秒以上空けて同じヒットを流す)で、ラベルがもう一度出て、ヒット欄の行が1行のまま上に来ることも確かめた。
+- 使い捨ての場所で、Vite 8.3.2 + MapLibre 6.12.0 + mqtt.js 5.16.0 のアプリをビルドし、`vite preview` と `vite`(開発サーバー)の両方で、地図の描画(Worker を含む)、Mosquitto への WebSocket の接続と受信、`data/` の import を確かめた。この計画のすべての `web/`、`scripts/`、`test/` のファイルを、この計画の本文と同じ内容で置き、`npm run lint`、`npm test`(Node 24 と、`npx -y node@22`。既存の 124 件を含めて 216 件)、`npm run web:build` が通ること、fake-notify(封筒あり・なし、3つの順序)で、HUD、時計、波紋、ヒット欄、通知ログ、当日の最新値(実際の気象庁の取得)、雪の粒、円表示、音のボタンが動くことを、Playwright で確かめた。Task 9 と Task 10 の段階の main.js も、それぞれビルドと lint が通ることを確かめた。Task 13 の 1280 × 720 の調整(`@media` で右の欄 320px とヒット欄 12px、余白 +60、南区のラベルを 26px 下へ)は、1280 × 720、1366 × 768、1920 × 1080 で、Task 13 Step 4 の確認(いまの表示と、最も長い表示「35cm」「-10.5℃」の両方で、ラベルが重ならず、パネルに隠れない。ヒット欄の行が切れない。出典が切れない。タイトルが右の欄に接しない)がすべて通ることを確かめた(+24 では手稲区と厚別区のラベルの半分がパネルに隠れたため、+60 にした)。Task 11 Step 5 の「やり直した再生」(60 秒以上空けて同じヒットを流す)で、ラベルがもう一度出て、ヒット欄の行が1行のまま上に来ることも確かめた。
 - 製品を特定できる値(製品名、既定のポート番号)が計画の本文にないことを grep で確かめた。
