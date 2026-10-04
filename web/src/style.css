@@ -1,0 +1,286 @@
+/* 地図アプリの画面。外部のフォントや画像は使わない(オフラインで動かすため)。 */
+:root {
+  --bg: #070d18;
+  --panel: rgba(14, 22, 38, 0.86);
+  --line: #2a3a58;
+  --text: #e8f0fa;
+  --dim: #8ea3c4;
+  --accent: #7fd1ff;
+  --hit3: #ffb020;
+  --hit5: #ff3d7f;
+  --label-bg: rgba(7, 13, 24, 0.72); /* color.js の LABEL_BG と同じ値 */
+  --ok: #35e08a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+}
+
+/* 区のラベル、波紋、ヒットのラベル(地図の上の DOM。クリックは地図に通す) */
+#fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 3;
+}
+
+.panel {
+  position: absolute;
+  z-index: 5;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+#title {
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 18px;
+}
+
+#title h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#title small {
+  margin-left: 10px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--dim);
+}
+
+#clocks {
+  top: 12px;
+  left: 12px;
+  min-width: 330px;
+}
+
+.clock + .clock {
+  margin-top: 6px;
+}
+
+.clock-label {
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+}
+
+.clock-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.clock-value.observed {
+  font-size: 28px;
+  color: var(--accent);
+}
+
+.clock-value.wall {
+  font-size: 20px;
+}
+
+#hud {
+  top: 150px;
+  left: 12px;
+  min-width: 330px;
+}
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 2px 0;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.hud-row b {
+  font-size: 20px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-row.sub {
+  padding-left: 1em;
+}
+
+.hud-row.hit b {
+  font-size: 15px;
+  color: var(--hit5);
+}
+
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #777;
+}
+
+#hud[data-status='connected'] .dot {
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+  animation: pulse 1.2s infinite;
+}
+
+/* 切れている、つなぎ直している、拒否された: 橙(会場で気付きやすくする) */
+#hud[data-status='reconnecting'] .dot,
+#hud[data-status='disconnected'] .dot,
+#hud[data-status='error'] .dot,
+#hud[data-status='refused'] .dot {
+  background: var(--hit3);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+#side {
+  top: 12px;
+  right: 12px;
+  bottom: 40px;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+#side h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+
+#hits {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  min-height: 7em;
+}
+
+#hits li {
+  padding: 3px 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#hits li.ge3 {
+  color: var(--hit3);
+}
+
+#hits li.ge5 {
+  color: var(--hit5);
+}
+
+#hits li time {
+  margin-right: 8px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+#legend {
+  left: 12px;
+  bottom: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--dim);
+  padding: 6px 12px;
+}
+
+.legend-bar {
+  display: inline-block;
+  width: 160px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* 出典は、演出の切り替えに関係なく常に表示する */
+#attribution {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 8px;
+  z-index: 6;
+  font-size: 11px;
+  color: #8295b5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 区のラベル。明るい区の上でも読めるよう、暗い半透明の背景を付ける(設計書 5.3) */
+.ward-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--label-bg);
+  text-align: center;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.ward-label b {
+  display: block;
+  font-size: 13px;
+}
+
+.ward-label .snow {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 6px;
+}
+
+.ward-label .temp {
+  font-variant-numeric: tabular-nums;
+}
+
+.ward-label .t-cold {
+  color: #9fd4ff;
+}
+
+.ward-label .t-near {
+  color: #e8f0fa;
+}
+
+.ward-label .t-warm {
+  color: #ffc58a;
+}
+
+.ward-label .t-none {
+  color: var(--dim);
+}

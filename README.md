@@ -8,7 +8,7 @@
 
 ## 動かし方(OSS のブローカー Stellio で再現する)
 
-必要なもの: Docker、Node.js 22 以上、メモリに約 2GB の余裕。
+必要なもの: Docker、Node.js 22.13 以上、メモリに約 2GB の余裕。
 
 ```bash
 npm ci

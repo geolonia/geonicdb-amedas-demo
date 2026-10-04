@@ -39,7 +39,7 @@ export async function runReplay({
     const { writes } = steps[i];
     for (const [k, { ward, obs }] of writes.entries()) {
       if (k > 0) await waitFor(i * intervalMs + (k * intervalMs) / writes.length, `${where}(${k + 1}/${writes.length} 件目、区: ${ward})`);
-      let ok = false;
+      let ok;
       // 最後の失敗が例外だったときの、その例外(中断のエラーに原因として含める)
       let error = null;
       try {
