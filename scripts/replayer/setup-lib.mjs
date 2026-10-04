@@ -29,7 +29,7 @@ export async function setupDemo({ client, wards, context, from, mqttBase, mqttVe
   }
   for (const { ward } of wards) {
     const id = entityId(ward.id);
-    deletedOrThrow(await client.deleteEntity(id), `エンティティ ${id} `);
+    deletedOrThrow(await client.deleteEntity(id), `エンティティ ${id}`);
   }
 
   for (const { ward, station, observations } of wards) {
