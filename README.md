@@ -72,12 +72,21 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 
 - 別のブローカーだけを使うときは、`docker compose -f compose/docker-compose.yml up -d mosquitto context` で、MQTT と `@context` の配信だけを起動できます。
   その場合、`CONTEXT` は、`http://127.0.0.1:8081/weather.jsonld` のように、そのブローカーから見える URL にします。
+- ホスト(compose の外)で動くブローカーでは、既定値の `mqtt://mosquitto:1883` や `http://context/weather.jsonld` は、そのブローカーから届きません。例えば、ポート 3120 で動くブローカーなら、次のようにします(Mosquitto と context は、上の compose で起動します)。
+
+  ```bash
+  BROKER_URL=http://localhost:3120 MQTT_URI_BASE=mqtt://localhost:1883 \
+  CONTEXT=https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld TENANT=demo \
+  npm run smoke -- --interval 1000
+  ```
+
+  `CONTEXT` は、コア context の URL か、`http://127.0.0.1:8081/weather.jsonld` のような、ブローカーから見える URL にします。
 - `setup` と `replay` は、同じ `--from` で実行します(`replay` は、エンティティにある属性を `--from` から再現するため)。
 
 | 環境変数 | 引数 | 既定値(Stellio の compose 用) | 内容 |
 |---|---|---|---|
 | `BROKER_URL` | `--broker-url` | `http://localhost:8080` | ブローカーの URL(`/ngsi-ld/v1` の手前まで) |
-| `TENANT` | `--tenant` | なし | `NGSILD-Tenant` ヘッダーの値 |
+| `TENANT` | `--tenant` | なし | `NGSILD-Tenant` ヘッダーの値。使える文字はブローカーによって制限される(英小文字、数字、`_` なら通りやすい。ハイフンや大文字は 400 になるものがある) |
 | `CONTEXT` | `--context` | `http://context/weather.jsonld` | `@context` の URL(ブローカーから見える URL) |
 | `MQTT_URI_BASE` | `--mqtt-base` | `mqtt://mosquitto:1883` | ブローカーから見た MQTT の宛先 |
 | `MQTT_VERSION` | `--mqtt-version` | `mqtt5.0` | 購読の `notifierInfo` に書く MQTT のバージョン |
@@ -93,7 +102,7 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 
 開始と終了の日時には、`+09:00` や `Z` のようなタイムゾーンを必ず付けます(付けないとエラーになります)。
 
-通知の形式は、ブローカーによって異なります(ETSI の MQTT バインディングは `{"body":…,"metadata":…}` の封筒)。
+通知の形式は、ブローカーによって異なります(ETSI の MQTT バインディングは `{"body":…,"metadata":…}` の封筒ですが、封筒のないブローカーもあります。`npm run smoke` は、どちらの形も扱えます)。
 
 環境変数だけで切り替えられるのは、次をすべて満たすブローカーです。
 
@@ -101,7 +110,7 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 - `@context` を URL の形で受け付ける。
 - 標準の MQTT の通知を送る。
 
-128ステップ(約13分)の再生は、Stellio でだけ測っています。ネットワークのない状態で新規に起動すると、Stellio が NGSI-LD のコア context(`https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld`)を外部から取得できず、`setup` のエンティティ作成が 503(`LOADING_REMOTE_CONTEXT_FAILED`)で失敗します。このリポジトリが配信する `weather.jsonld` だけでは足りません。初回の起動と `setup` は、ネットワークがある状態で行ってください。
+「速度」の節の測定(128ステップ、約13分)と、この次の起動の注意は、Stellio の場合のものです。別のブローカーでは、`--interval` を `npm run smoke` で決めてください(通知が滞留しないブローカーでは、もっと短い間隔でも通ります)。ネットワークのない状態で新規に起動すると、Stellio が NGSI-LD のコア context(`https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld`)を外部から取得できず、`setup` のエンティティ作成が 503(`LOADING_REMOTE_CONTEXT_FAILED`)で失敗します。このリポジトリが配信する `weather.jsonld` だけでは足りません。初回の起動と `setup` は、ネットワークがある状態で行ってください。
 
 ### データを作り直したいとき
 
