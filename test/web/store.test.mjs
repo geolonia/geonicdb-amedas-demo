@@ -91,3 +91,29 @@ test('depthDelta1h: ちょうど1時間前がなければ、30分さかのぼっ
   assert.equal(depthDelta1h(h, t, null), null);
   assert.equal(depthDelta1h(h, null, 8), null);
 });
+
+test('dateObserved が NaN / Infinity / null のとき、時計と区の時刻は変えない', () => {
+  const s = createWardStore(WARDS);
+  s.applyLive(live('kita', '03:00', { snowHeight: [26, at('03:00')] }));
+  const t = Date.parse(at('03:00'));
+  for (const bad of [NaN, Infinity, -Infinity, null]) {
+    const r = s.applyLive({ ...live('kita', '04:00', { snowHeight: [27, at('04:00')] }), dateObserved: bad });
+    assert.equal(s.clock(), t, String(bad));
+    assert.equal(r.dateObserved, t, String(bad));
+    assert.equal(s.get('kita').dateObserved, t, String(bad));
+  }
+  const fresh = createWardStore(WARDS);
+  fresh.applyLive({ ...live('kita', '04:00', {}), dateObserved: NaN });
+  assert.equal(fresh.clock(), null);
+  assert.equal(fresh.get('kita').dateObserved, null);
+});
+
+test('Object.prototype のキーの区 ID は、知らない区として扱う', () => {
+  const s = createWardStore(WARDS);
+  for (const ward of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    assert.equal(s.get(ward), null, ward);
+    assert.equal(s.applyLive(live(ward, '03:00', { snowHeight: [1, at('03:00')] })), null, ward);
+  }
+  assert.equal(s.clock(), null);
+  assert.equal(Object.keys(s.get('kita')).includes('constructor'), false);
+});

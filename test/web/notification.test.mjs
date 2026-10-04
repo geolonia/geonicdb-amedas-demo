@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeMessage, kindOfTopic, readDateTime, wardOfEntityId, isNewSnowfall, freshValue, parsePayload,
+  normalizeMessage, kindOfTopic, readDateTime, wardOfEntityId, isNewSnowfall, freshValue, parsePayload, BOUNDS,
   TOPIC_LIVE, TOPIC_GE5, TOPIC_GE3, SUBSCRIBE_TOPICS,
 } from '../../web/src/lib/notification.js';
 import { entity, stellioMessage, bareMessage } from './helpers.mjs';
@@ -123,6 +123,42 @@ test('freshValue: 1時間より古い値は欠測として null', () => {
   assert.equal(freshValue({ value: 1, observedAt: null }, t), 1);
   assert.equal(freshValue({ value: 1, observedAt: t }, null), 1);
   assert.equal(freshValue(null, t), null);
+  assert.equal(freshValue({ value: 1, observedAt: t }, undefined), 1);
   // observedAt が dateObserved より新しい(時刻の逆転)は、信用しない
   assert.equal(freshValue({ value: 1, observedAt: t + 1 }, t), null);
+});
+
+test('readDateTime: 明示的なゾーンつきの ISO 8601 だけ受ける', () => {
+  const z = Date.parse('2025-11-18T03:00:00Z');
+  assert.equal(readDateTime({ value: '2025-11-18T03:00:00Z' }), z);
+  assert.equal(readDateTime({ value: '2025-11-18T03:00:00.5Z' }), z + 500);
+  assert.equal(readDateTime({ value: '2025-11-18T03:00:00.123456789Z' }), z + 123);
+  assert.equal(readDateTime({ value: '2025-11-18T12:00:00+09:00' }), z);
+  assert.equal(readDateTime({ value: { type: 'DateTime', '@value': '2025-11-18T12:00:00+09:00' } }), z);
+  for (const bad of ['2025', '5', 'Nov 18 2025', '2025-11-18T03:00:00', '2025-11-18 03:00:00Z', '', '1999-12-31T23:59:59Z',
+    '2101-01-01T00:00:00Z', '2025-13-40T25:61:61Z']) {
+    assert.equal(readDateTime({ value: bad }), null, bad);
+    assert.equal(readDateTime({ value: { type: 'DateTime', '@value': bad } }), null, `@value ${bad}`);
+    assert.equal(readDateTime({ value: { '@type': 'DateTime', '@value': bad } }), null, `@type ${bad}`);
+  }
+  for (const bad of [null, 0, true, [], {}, { '@value': 5 }]) assert.equal(readDateTime({ value: bad }), null);
+  assert.equal(readDateTime({ value: '2000-01-01T00:00:00Z' }), Date.UTC(2000, 0, 1));
+  assert.equal(readDateTime({ value: '2100-12-31T23:59:59Z' }), Date.UTC(2100, 11, 31, 23, 59, 59));
+});
+
+test('属性値の妥当な範囲: 範囲外は欠測(null)、丸めない', () => {
+  assert.ok(Object.isFrozen(BOUNDS));
+  const read = (attr, v) => normalizeMessage(TOPIC_LIVE, bareMessage(entity({ dateObserved: '2025-11-18T03:00:00Z', attrs: { [attr]: [v, '2025-11-18T03:00:00Z'] } })), 0)[0].attrs[attr];
+  const cases = { temperature: [-80, 60], snowHeight: [0, 1000], snowfall1h: [0, 100], windSpeed: [0, 100], windDirection: [0, 360], precipitation: [0, 500] };
+  for (const [k, [lo, hi]] of Object.entries(cases)) {
+    assert.deepEqual(BOUNDS[k], [lo, hi]);
+    assert.equal(read(k, lo).value, lo, `${k} min`);
+    assert.equal(read(k, hi).value, hi, `${k} max`);
+    assert.equal(read(k, lo - 0.001), null, `${k} below`);
+    assert.equal(read(k, hi + 0.001), null, `${k} above`);
+    assert.equal(read(k, 1e308), null, `${k} 1e308`);
+    assert.equal(read(k, -1e308), null, `${k} -1e308`);
+  }
+  assert.equal(read('snowHeight', -0).value, 0);
+  assert.equal(read('snowHeight', null), null);
 });

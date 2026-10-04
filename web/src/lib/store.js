@@ -50,7 +50,8 @@ export function createWardStore(wardIds) {
       if (obs.kind !== 'live') return null;
       const w = wards.get(obs.ward);
       if (!w) return null;
-      const t = obs.dateObserved;
+      // 時刻が有限の数でなければ(壊れた dateObserved)、時計と区の時刻は更新しない
+      const t = Number.isFinite(obs.dateObserved) ? obs.dateObserved : null;
       if (t !== null) {
         clock = t;
         // 時刻が戻った(setup をやり直した)ときは、増分の履歴を捨てる

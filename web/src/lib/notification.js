@@ -14,6 +14,17 @@ export const SUBSCRIBE_TOPICS = Object.freeze([TOPIC_LIVE, 'amedas/cond/#']);
 
 export const ATTRS = Object.freeze(['temperature', 'snowHeight', 'snowfall1h', 'windSpeed', 'windDirection', 'precipitation']);
 
+// 属性値の妥当な範囲 [min, max](単位は ATTRS の順に ℃, cm, cm/h, m/s, 度, mm)。
+// 範囲外は丸めずに欠測(null)として扱う(匿名の MQTT に、壊れた値や桁違いの値が届いても表示を壊さない)。
+export const BOUNDS = Object.freeze({
+  temperature: Object.freeze([-80, 60]),
+  snowHeight: Object.freeze([0, 1000]),
+  snowfall1h: Object.freeze([0, 100]),
+  windSpeed: Object.freeze([0, 100]),
+  windDirection: Object.freeze([0, 360]),
+  precipitation: Object.freeze([0, 500]),
+});
+
 // 表示に使う値の古さの上限(気温は欠測のステップで書かれず、古い値がエンティティに残る)
 export const FRESH_MS = 60 * 60 * 1000;
 
@@ -36,20 +47,28 @@ export function parsePayload(payload) {
   }
 }
 
+// Date.parse は寛容すぎる("2025" や "5" を日付にし、ゾーンなしは端末のローカル時刻で読む)ので、
+// ゾーンつきの ISO 8601 の日時だけを受け、2000〜2100年の範囲に限る。
+const ISO_WITH_ZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+const MIN_MS = Date.UTC(2000, 0, 1);
+const MAX_MS = Date.UTC(2101, 0, 1) - 1;
+
 // DateTime の Property の値をミリ秒にする。
 // 通知では {"type":"DateTime","@value":"…"}(書き込みの "@type" が "type" に置き換わる)。文字列の値も読む。
 export function readDateTime(prop) {
   const v = prop?.value;
   const s = typeof v === 'string' ? v : v?.['@value'];
-  if (typeof s !== 'string') return null;
+  if (typeof s !== 'string' || !ISO_WITH_ZONE.test(s)) return null;
   const ms = Date.parse(s);
-  return Number.isFinite(ms) ? ms : null;
+  return Number.isFinite(ms) && ms >= MIN_MS && ms <= MAX_MS ? ms : null;
 }
 
 // 観測値の属性: { value: 数, observedAt: ミリ秒 | null }。値が数でなければ null。
-function readAttr(prop) {
+function readAttr(prop, key) {
   const v = prop?.value;
   if (typeof v !== 'number' || !Number.isFinite(v)) return null;
+  const [min, max] = BOUNDS[key];
+  if (v < min || v > max) return null;
   const t = typeof prop.observedAt === 'string' ? Date.parse(prop.observedAt) : NaN;
   return { value: v, observedAt: Number.isFinite(t) ? t : null };
 }
@@ -77,7 +96,7 @@ export function normalizeMessage(topic, payload, receivedAt, wardIds) {
     const ward = wardOfEntityId(e?.id);
     if (!ward || (wardIds && !wardIds.has(ward))) continue;
     const attrs = {};
-    for (const k of ATTRS) attrs[k] = readAttr(e[k]);
+    for (const k of ATTRS) attrs[k] = readAttr(e[k], k);
     out.push({ kind, ward, receivedAt, sentAt: readDateTime(e.sentAt), dateObserved: readDateTime(e.dateObserved), attrs });
   }
   return out;
@@ -91,10 +110,10 @@ export function isNewSnowfall(obs) {
 }
 
 // 表示に使う値。observedAt が dateObserved から maxAgeMs より古ければ null(欠測として「—」にする)。
-// dateObserved か observedAt がなければ、値をそのまま使う。
+// dateObserved(null / undefined)か observedAt がなければ、値をそのまま使う。
 export function freshValue(attr, dateObserved, maxAgeMs = FRESH_MS) {
   if (!attr) return null;
-  if (dateObserved === null || attr.observedAt === null) return attr.value;
+  if (dateObserved == null || attr.observedAt === null) return attr.value;
   const age = dateObserved - attr.observedAt;
   return age >= 0 && age < maxAgeMs ? attr.value : null;
 }
