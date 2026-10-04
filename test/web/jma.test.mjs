@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseLatestTime, parsePoint, widgetText, loadLatest, WIND_DIRECTIONS, LATEST_TIME_URL } from '../../web/src/lib/jma.js';
+import { parseLatestTime, parsePoint, isFresh, widgetText, loadLatest, WIND_DIRECTIONS, LATEST_TIME_URL } from '../../web/src/lib/jma.js';
 
 // 2026-10-04 に取得した実データ(https://www.jma.go.jp/bosai/amedas/data/point/14163/20261004_21.json)
 const sample = JSON.parse(readFileSync(new URL('./fixtures/jma-point-14163-20261004_21.json', import.meta.url), 'utf8'));
@@ -65,18 +65,37 @@ const fakeFetch = (routes) => async (url) => {
   if (r === undefined) return { ok: false, status: 404, text: async () => 'not found' };
   return { ok: true, status: 200, text: async () => r };
 };
+const NOW = Date.parse('2026-10-04T21:05:00+09:00'); // 取得の差し替えテストの「いま」
 const POINT_URL = 'https://www.jma.go.jp/bosai/amedas/data/point/14163/20261004_21.json';
 
 test('loadLatest: latest_time → 点のファイルの順に取り、読んだ値を返す', async () => {
-  const p = await loadLatest(fakeFetch({ [LATEST_TIME_URL]: '2026-10-04T21:00:00+09:00', [POINT_URL]: JSON.stringify(sample) }));
+  const p = await loadLatest(fakeFetch({ [LATEST_TIME_URL]: '2026-10-04T21:00:00+09:00', [POINT_URL]: JSON.stringify(sample) }), { nowMs: NOW });
   assert.equal(p.temperature, 12);
 });
 
 test('loadLatest: どの失敗でも null(例外にしない)', async () => {
-  assert.equal(await loadLatest(fakeFetch({})), null); // 404
-  assert.equal(await loadLatest(fakeFetch({ [LATEST_TIME_URL]: new TypeError('Failed to fetch') })), null); // ネットワークなし
-  assert.equal(await loadLatest(fakeFetch({ [LATEST_TIME_URL]: '<html>maintenance</html>' })), null);
-  assert.equal(await loadLatest(fakeFetch({ [LATEST_TIME_URL]: '2026-10-04T21:00:00+09:00' })), null); // 点のファイルが 404
-  assert.equal(await loadLatest(fakeFetch({ [LATEST_TIME_URL]: '2026-10-04T21:00:00+09:00', [POINT_URL]: '{broken' })), null);
-  assert.equal(await loadLatest(fakeFetch({ [LATEST_TIME_URL]: '2026-10-04T21:00:00+09:00', [POINT_URL]: '{"x":1}' })), null);
+  assert.equal(await loadLatest(fakeFetch({}), { nowMs: NOW }), null); // 404
+  assert.equal(await loadLatest(fakeFetch({ [LATEST_TIME_URL]: new TypeError('Failed to fetch') }), { nowMs: NOW }), null); // ネットワークなし
+  assert.equal(await loadLatest(fakeFetch({ [LATEST_TIME_URL]: '<html>maintenance</html>' }), { nowMs: NOW }), null);
+  assert.equal(await loadLatest(fakeFetch({ [LATEST_TIME_URL]: '2026-10-04T21:00:00+09:00' }), { nowMs: NOW }), null); // 点のファイルが 404
+  assert.equal(await loadLatest(fakeFetch({ [LATEST_TIME_URL]: '2026-10-04T21:00:00+09:00', [POINT_URL]: '{broken' }), { nowMs: NOW }), null);
+  assert.equal(await loadLatest(fakeFetch({ [LATEST_TIME_URL]: '2026-10-04T21:00:00+09:00', [POINT_URL]: '{"x":1}' }), { nowMs: NOW }), null);
+});
+
+test('isFresh: 観測時刻が新しければ true、3時間を超えて古い・未来・形が不正なら false', () => {
+  const now = Date.parse('2026-10-05T01:50:00+09:00');
+  assert.equal(isFresh('2026-10-05T01:40:00+09:00', now), true); // 10分前
+  assert.equal(isFresh('2026-10-04T22:50:00+09:00', now), true); // ちょうど3時間
+  assert.equal(isFresh('2026-10-04T22:49:59+09:00', now), false); // 3時間 + 1秒
+  assert.equal(isFresh('2026-10-02T01:50:00+09:00', now), false); // 3日前
+  assert.equal(isFresh('2026-10-05T02:50:00+09:00', now), false); // 未来 1時間
+  assert.equal(isFresh('2026-10-05T01:59:00+09:00', now), true); // 9分先までは時計のずれとして許す
+  for (const t of ['2026-10-05T01:40:00', '2026-10-05T01:40:00Z', 'x', '', null, undefined]) assert.equal(isFresh(t, now), false, String(t));
+  assert.equal(isFresh('2026-10-05T01:40:00+09:00', NaN), false);
+});
+
+test('loadLatest: 観測時刻が古い(3日前)なら、値が読めても null', async () => {
+  const fetchOld = fakeFetch({ [LATEST_TIME_URL]: '2026-10-04T21:00:00+09:00', [POINT_URL]: JSON.stringify(sample) });
+  assert.equal(await loadLatest(fetchOld, { nowMs: NOW + 3 * 24 * 3600_000 }), null);
+  assert.notEqual(await loadLatest(fetchOld, { nowMs: NOW }), null);
 });

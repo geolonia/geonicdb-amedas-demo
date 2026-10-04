@@ -25,7 +25,7 @@ export function installLiveWidget(app) {
   document.getElementById('side').append(panel);
 
   const refresh = async () => {
-    const p = await loadLatest();
+    const p = await loadLatest(globalThis.fetch, { nowMs: Date.now() });
     if (!p) {
       panel.hidden = true;
       return;

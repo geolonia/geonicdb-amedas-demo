@@ -32,6 +32,15 @@ export function parseLatestTime(text, station = SAPPORO_STATION) {
   };
 }
 
+// 観測時刻(「2026-10-05T01:50:00+09:00」の形。タイムゾーンつきの文字列だけ)が、nowMs から見て新しいか。
+// 古すぎる(既定: 3時間 = 更新間隔 1時間の3倍を超える)ときと、未来(10分より先)のときは false。純関数(now は引数)。
+export function isFresh(observedAtIso, nowMs, maxAgeMs = 3 * 3600_000) {
+  const text = String(observedAtIso ?? '').trim();
+  if (!LATEST_RE.test(text) || !Number.isFinite(nowMs)) return false;
+  const age = nowMs - Date.parse(text);
+  return Number.isFinite(age) && age <= maxAgeMs && age >= -10 * 60_000;
+}
+
 // [値, 品質] の組から、品質 0 の数だけを取り出す
 function good(pair) {
   if (!Array.isArray(pair) || pair[1] !== 0) return null;
@@ -68,7 +77,7 @@ export function widgetText(p) {
 
 // 取得して読む。どんな失敗(ネットワーク、タイムアウト、HTTP の失敗、形の違い)でも null を返し、例外にしない。
 // fetchImpl はテストで差し替える。タイマーは、応答のあとに必ず止める(テストのプロセスを残さない)。
-export async function loadLatest(fetchImpl = globalThis.fetch, { timeoutMs = 8000 } = {}) {
+export async function loadLatest(fetchImpl = globalThis.fetch, { timeoutMs = 8000, nowMs = Date.now() } = {}) {
   const get = async (url) => {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
@@ -81,8 +90,10 @@ export async function loadLatest(fetchImpl = globalThis.fetch, { timeoutMs = 800
     }
   };
   try {
-    const latest = parseLatestTime(await get(LATEST_TIME_URL));
-    if (!latest) return null;
+    const latestText = await get(LATEST_TIME_URL);
+    const latest = parseLatestTime(latestText);
+    // JMA が止まっているときに、古い値を「いま」として見せない
+    if (!latest || !isFresh(latestText, nowMs)) return null;
     const text = await get(latest.url);
     if (text === null) return null;
     return parsePoint(JSON.parse(text), latest.key);
