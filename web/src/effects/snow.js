@@ -1,9 +1,10 @@
 // 雪の粒(余裕があれば)。2D canvas を地図とラベルの間に重ねる。
 // 区ごとに、観測点の上空から粒を落とす。強さは lib/intensity.js(降雪量と積雪深の増分、3℃ を超えたら 0)。
 // 描画の倍率は min(devicePixelRatio, 1.5)(Retina での負荷を抑える。設計書 5.3)。
-// 切り替えを外すと canvas を消してループを止める。タブが隠れている間は requestAnimationFrame が止まり、
+// 切り替えを外すか、雪が降っていなくて粒も残っていない(アイドル)ときは、canvas を1回消してループを止める。
+// 降雪の通知で強さが 0 より大きくなったら、切り替えがオンのときだけ再開する。タブが隠れている間は requestAnimationFrame が止まり、
 // 戻った最初のフレームの dt は 0.05 秒までに抑える(粒が飛ばない)。
-import { snowIntensity, canvasScale, approach, spawnCount } from '../lib/intensity.js';
+import { snowIntensity, canvasScale, approach, spawnCount, isIdle } from '../lib/intensity.js';
 
 const MAX_PARTICLES = 3000;
 
@@ -35,8 +36,7 @@ export function installSnow(app) {
   app.controls?.addToggle('雪の粒', true, (v) => {
     enabled = v;
     if (v) {
-      last = performance.now();
-      if (!raf) raf = requestAnimationFrame(frame);
+      start();
     } else {
       particles.length = 0;
       ctx.clearRect(0, 0, width, height);
@@ -46,6 +46,12 @@ export function installSnow(app) {
     last = performance.now();
   });
 
+  const start = () => {
+    if (!enabled || raf) return;
+    last = performance.now();
+    raf = requestAnimationFrame(frame);
+  };
+
   app.on('live', (obs, state) => {
     const e = emitters.get(obs.ward) ?? { current: 0, target: 0, carry: 0, vx: 0 };
     e.target = snowIntensity(state);
@@ -54,6 +60,7 @@ export function installSnow(app) {
     const dir = obs.attrs.windDirection?.value;
     e.vx = Number.isFinite(dir) ? -Math.sin((dir * Math.PI) / 180) * speed * 9 : 0;
     emitters.set(obs.ward, e);
+    if (e.target > 0) start();
   });
 
   function frame(now) {
@@ -64,6 +71,7 @@ export function installSnow(app) {
     ctx.clearRect(0, 0, width, height);
     for (const [ward, e] of emitters) {
       e.current = approach(e.current, e.target, dt);
+      if (e.target === 0 && e.current <= 0.02) e.current = 0; // 近づき切らない端数は 0 にする(アイドル判定のため)
       const p = app.positions.get(ward);
       if (!p) continue;
       const { count, carry } = spawnCount(e.current, dt, e.carry);
@@ -95,9 +103,13 @@ export function installSnow(app) {
         particles.pop();
       }
     }
+    if (isIdle(particles.length, emitters.values())) {
+      ctx.clearRect(0, 0, width, height); // 最後に1回消して、ループを止める
+      return;
+    }
     raf = requestAnimationFrame(frame);
   }
-  raf = requestAnimationFrame(frame);
+  raf = requestAnimationFrame(frame); // 起動直後は雪がないので、最初のフレームで止まる
 
   app.snow = { count: () => particles.length, running: () => raf !== 0 };
 }

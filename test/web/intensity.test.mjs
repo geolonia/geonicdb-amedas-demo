@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { snowIntensity, canvasScale, approach, spawnCount } from '../../web/src/lib/intensity.js';
+import { snowIntensity, canvasScale, approach, spawnCount, isIdle } from '../../web/src/lib/intensity.js';
 
 test('降雪量 5cm で最大、2cm で 0.4', () => {
   assert.equal(snowIntensity({ snowfall1h: 5, temperature: -1 }), 1);
@@ -46,4 +46,13 @@ test('spawnCount: 端数を持ち越す、弱すぎれば 0', () => {
   const b = spawnCount(0.5, 1 / 60, a.carry, 120);
   assert.equal(a.count + b.count, 2);
   assert.deepEqual(spawnCount(0.01, 1, 0.5), { count: 0, carry: 0 });
+});
+
+test('isIdle: 粒が 0 で、全区の current と target が 0 のときだけアイドル', () => {
+  const e = (current, target) => ({ current, target });
+  assert.equal(isIdle(0, []), true);
+  assert.equal(isIdle(0, [e(0, 0), e(0, 0)]), true);
+  assert.equal(isIdle(1, [e(0, 0)]), false);
+  assert.equal(isIdle(0, [e(0, 0), e(0, 0.2)]), false);
+  assert.equal(isIdle(0, [e(0.01, 0)]), false);
 });

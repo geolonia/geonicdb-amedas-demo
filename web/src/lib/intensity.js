@@ -31,3 +31,10 @@ export function spawnCount(intensity, dtSec, carry, perSecond = 200) {
   const count = Math.floor(total);
   return { count, carry: total - count };
 }
+
+// 描画ループを止めてよいか: 粒が 1つもなく、全区の強さ(current)も目標(target)も 0
+export function isIdle(particleCount, emitters) {
+  if (particleCount > 0) return false;
+  for (const e of emitters) if (e.current > 0 || e.target > 0) return false;
+  return true;
+}
