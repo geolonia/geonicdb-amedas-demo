@@ -8,9 +8,18 @@ import { normalizeMessage, SUBSCRIBE_TOPICS } from './lib/notification.js';
 
 // onStatus(status): 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'refused' | 'error'
 // debugLog: 配列を渡すと、受信した通知を1件ずつ記録する(?debug)
-export function connectFeed({ url, wardIds, onObservations, onStatus = () => {}, debugLog = null }) {
+// connect: 接続の関数(テストで差し替える。既定は mqtt.connect)
+export function connectFeed({ url, wardIds, onObservations, onStatus = () => {}, debugLog = null, connect = mqtt.connect }) {
   onStatus('connecting');
-  const client = mqtt.connect(url, { reconnectPeriod: 2000, connectTimeout: 5000, clean: true, resubscribe: false });
+  let client;
+  try {
+    client = connect(url, { reconnectPeriod: 2000, connectTimeout: 5000, clean: true, resubscribe: false });
+  } catch (e) {
+    // 壊れた URL などで同期的に投げる。アプリは止めず、MQTT なしで動かす
+    console.error('MQTT に接続できませんでした', e?.message ?? e);
+    onStatus('error');
+    return { end: () => {} };
+  }
 
   client.on('connect', () => {
     onStatus('connected');

@@ -66,3 +66,17 @@ test('temperatureClass: 欠測は none(色を付けない)', () => {
   assert.equal(temperatureClass(2.5), 'near');
   assert.equal(temperatureClass(3.1), 'warm');
 });
+
+test('readConfig: ?mqtt は new URL で検証する(壊れた値・ws/wss 以外は既定に戻し警告)', () => {
+  for (const bad of ['ws://%25zz:9001', 'ws://[::1:9001', 'http://x', 'ws://']) {
+    const c = readConfig(`?mqtt=${encodeURIComponent(bad)}`);
+    assert.equal(c.mqttUrl, DEFAULT_MQTT_URL, bad);
+    assert.equal(c.warnings.length, 1, bad);
+  }
+  assert.equal(readConfig('?mqtt=WS://host:9001').mqttUrl, 'WS://host:9001');
+  assert.deepEqual(readConfig('?mqtt=WS://host:9001').warnings, []);
+  assert.equal(readConfig('?mqtt=ws://127.0.0.1:9001').mqttUrl, 'ws://127.0.0.1:9001');
+  assert.equal(readConfig('?mqtt=wss://example.org/mqtt').mqttUrl, 'wss://example.org/mqtt');
+  assert.deepEqual(readConfig('?mqtt=').warnings, []);
+  assert.deepEqual(readConfig('').warnings, []);
+});
