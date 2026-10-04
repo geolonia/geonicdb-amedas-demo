@@ -12,6 +12,9 @@ export const TOPIC_GE5 = 'amedas/cond/snowfall1h_ge5';
 export const TOPIC_GE3 = 'amedas/cond/snowfall1h_ge3';
 export const SUBSCRIBE_TOPICS = Object.freeze([TOPIC_LIVE, 'amedas/cond/#']);
 
+// 1通の通知で処理する件数の上限(匿名の MQTT に、巨大な通知が届いても固まらない。実際は区の数 = 10件)
+export const MAX_ENTITIES_PER_MESSAGE = 50;
+
 export const ATTRS = Object.freeze(['temperature', 'snowHeight', 'snowfall1h', 'windSpeed', 'windDirection', 'precipitation']);
 
 // 属性値の妥当な範囲 [min, max](単位は ATTRS の順に ℃, cm, cm/h, m/s, 度, mm)。
@@ -69,8 +72,7 @@ function readAttr(prop, key) {
   if (typeof v !== 'number' || !Number.isFinite(v)) return null;
   const [min, max] = BOUNDS[key];
   if (v < min || v > max) return null;
-  const t = typeof prop.observedAt === 'string' ? Date.parse(prop.observedAt) : NaN;
-  return { value: v, observedAt: Number.isFinite(t) ? t : null };
+  return { value: v, observedAt: readDateTime({ value: prop.observedAt }) };
 }
 
 const ENTITY_ID = /^urn:ngsi-ld:WeatherObserved:sapporo-([a-z]+)$/;
@@ -90,7 +92,7 @@ export function normalizeMessage(topic, payload, receivedAt, wardIds) {
   if (!kind) return [];
   const msg = parsePayload(payload);
   const n = msg?.body ?? msg;
-  const data = Array.isArray(n?.data) ? n.data : [];
+  const data = Array.isArray(n?.data) ? n.data.slice(0, MAX_ENTITIES_PER_MESSAGE) : [];
   const out = [];
   for (const e of data) {
     const ward = wardOfEntityId(e?.id);

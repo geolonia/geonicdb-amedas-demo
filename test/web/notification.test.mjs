@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeMessage, kindOfTopic, readDateTime, wardOfEntityId, isNewSnowfall, freshValue, parsePayload, BOUNDS,
+  MAX_ENTITIES_PER_MESSAGE, normalizeMessage, kindOfTopic, readDateTime, wardOfEntityId, isNewSnowfall, freshValue, parsePayload, BOUNDS,
   TOPIC_LIVE, TOPIC_GE5, TOPIC_GE3, SUBSCRIBE_TOPICS,
 } from '../../web/src/lib/notification.js';
 import { entity, stellioMessage, bareMessage } from './helpers.mjs';
@@ -161,4 +161,17 @@ test('属性値の妥当な範囲: 範囲外は欠測(null)、丸めない', () 
   }
   assert.equal(read('snowHeight', -0).value, 0);
   assert.equal(read('snowHeight', null), null);
+});
+
+test('observedAt も厳密に読む(ゾーンなし・年だけは null、値は残す)', () => {
+  const mk = (t) => normalizeMessage('amedas/live', bareMessage(entity({ attrs: { snowHeight: [26, t] } })), 0)[0].attrs.snowHeight;
+  assert.deepEqual(mk('2025-11-18T03:00:00'), { value: 26, observedAt: null });
+  assert.deepEqual(mk('2025'), { value: 26, observedAt: null });
+  assert.deepEqual(mk('2025-11-18T03:00:00Z'), { value: 26, observedAt: Date.parse('2025-11-18T03:00:00Z') });
+});
+
+test('1通あたり最大 50 件まで処理する', () => {
+  const list = Array.from({ length: 3000 }, () => entity({ attrs: { snowHeight: [1, '2025-11-18T03:00:00Z'] } }));
+  assert.equal(MAX_ENTITIES_PER_MESSAGE, 50);
+  assert.equal(normalizeMessage('amedas/live', JSON.stringify({ data: list }), 0).length, 50);
 });
