@@ -21,6 +21,7 @@ import { installControls } from './panels/controls.js';
 import { installLog } from './panels/log.js';
 import { installLiveWidget } from './live-widget.js';
 import { installSnow } from './effects/snow.js';
+import { installCircleView } from './effects/circle-view.js';
 
 async function main() {
   // 現在時刻の時計は、データを読む前に始める(読み込みに失敗しても止めない)
@@ -120,6 +121,7 @@ async function main() {
   installLog(app);
   installLiveWidget(app);
   installSnow(app);
+  installCircleView(app);
 }
 
 main().catch((e) => {
