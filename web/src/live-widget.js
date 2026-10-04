@@ -24,15 +24,25 @@ export function installLiveWidget(app) {
   panel.append(heading, value, meta, source);
   document.getElementById('side').append(panel);
 
+  // どんな失敗(取得、形の違い、表示の組み立て)でも、出典も含めてパネルごと隠す。例外は外に出さない
+  let warned = false;
   const refresh = async () => {
-    const p = await loadLatest(globalThis.fetch, { nowMs: Date.now() });
-    if (!p) {
+    try {
+      const p = await loadLatest(globalThis.fetch, { nowMs: Date.now() });
+      if (!p) {
+        panel.hidden = true;
+        return;
+      }
+      value.textContent = widgetText(p);
+      meta.textContent = `${p.time} の観測`;
+      panel.hidden = false;
+    } catch (err) {
       panel.hidden = true;
-      return;
+      if (!warned) {
+        warned = true;
+        console.warn('当日の最新値を表示できませんでした(以後は表示しません。次の取得で直れば再び表示します):', err);
+      }
     }
-    value.textContent = widgetText(p);
-    meta.textContent = `${p.time} の観測`;
-    panel.hidden = false;
   };
   refresh();
   setInterval(refresh, REFRESH_MS);
