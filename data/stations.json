@@ -25,7 +25,7 @@
       "address": "https://www.city.sapporo.jp/shisetsuannai/032.html",
       "coordinates": "国土地理院 住所検索 https://msearch.gsi.go.jp/address-search/AddressSearch 2026-10-04 取得"
     },
-    "note": "札幌市の積雪深ページには北区の観測地点が2か所ある(太平の北区土木センターと、あいの里の拓北水再生プラザ)。CSV「2025kansokukirokukita.csv」の元データセット(sapporo_weather)は「各区土木センター10か所」と明記しているため、北区土木センター(太平)と判断した。CSV自体には地点名の列がなく、直接の裏付けはない。"
+    "note": "札幌市の積雪深ページには北区の観測地点が2か所ある(太平の北区土木センターと、あいの里の拓北水再生プラザ)。元データセット(sapporo_weather)は観測地点を「札幌市内各区の土木センター10か所」と明記しており、CSV「2025kansokukirokukita.csv」に地点名の列はない。市の積雪深グラフ(www4.city.sapporo.jp/kensetsu/yuki/data/snowdepth_02.gif と snowdepth_16.gif の2024〜25年度の折れ線)を読み取って、CSV の毎朝9時の積雪深と比べると、太平とは平均2cmの差で一致し、あいの里とは平均26cmずれる(2025-02-23 は CSV 113cm、太平 約110cm、あいの里 約70cm)。このため北区土木センター(太平)とほぼ確実に判断した。市が北区の CSV の地点名を直接示した資料はない。2026-10-04 確認。"
   },
   {
     "ward": "higashi",
