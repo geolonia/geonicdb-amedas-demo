@@ -33,3 +33,18 @@ export function notificationKeys(message) {
 export function refusedTopics(granted) {
   return granted.filter((g) => g.qos >= 128).map((g) => g.topic);
 }
+
+// 送った書き込み(sentKeys)の通知が、2回以上届いた分(余分な通知の件数)を数える。
+// 設計では、成功した PATCH 1回につき、amedas/live の通知は1回。送っていないキー(setup の書き込みなど)の重複は数えない。
+// receivedCounts: Map<key, 受信回数>。examples は、重複したキーの最初の5件。
+export function countDuplicates(receivedCounts, sentKeys) {
+  let count = 0;
+  const keys = [];
+  for (const [key, n] of receivedCounts) {
+    if (n > 1 && sentKeys.has(key)) {
+      count += n - 1;
+      keys.push(key);
+    }
+  }
+  return { count, examples: keys.slice(0, 5) };
+}

@@ -54,3 +54,12 @@ test('refusedTopics: SUBACK で拒否された(QoS 128 の)トピックを返す
   assert.deepEqual(refusedTopics([{ topic: 'a', qos: 135 }, { topic: 'b', qos: 1 }]), ['a']);
   assert.deepEqual(refusedTopics([]), []);
 });
+
+test('countDuplicates: 送った書き込みの通知が2回以上届いた分を数え、送っていないキーの重複は無視する', async () => {
+  const { countDuplicates } = await import('../scripts/smoke/analyze.mjs');
+  const received = new Map([['a|1', 1], ['b|2', 3], ['c|3', 2], ['setup|0', 4]]);
+  const sent = new Set(['a|1', 'b|2', 'c|3', 'd|4']);
+  // b は 2 件、c は 1 件の余分。setup の通知(送った書き込みではない)は数えない
+  assert.deepEqual(countDuplicates(received, sent), { count: 3, examples: ['b|2', 'c|3'] });
+  assert.deepEqual(countDuplicates(new Map([['a|1', 1]]), sent), { count: 0, examples: [] });
+});

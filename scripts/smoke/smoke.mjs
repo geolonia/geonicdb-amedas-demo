@@ -1,19 +1,22 @@
 // 使い方: npm run smoke -- [--interval MS] [--from ISO] [--to ISO]
 // 通知を待つ上限は、再生にかかった時間(最低 10 分)。環境変数 SMOKE_DRAIN_MAX_MS(ミリ秒)で変えられる。
 // setup と replay を実行しながら MQTT を購読し、(ID, sentAt)で突き合わせる。
-// 出力: 欠落の件数、配信の遅延(中央値、p95、最大)、前半と後半の遅延(滞留の兆候)、条件付き購読の件数。
+// 出力: 欠落の件数、重複した通知の件数、配信の遅延(中央値、p95、最大)、前半と後半の遅延(滞留の兆候)、条件付き購読の件数。
+// 欠落か重複(PATCH 1回につき amedas/live の通知は1回のはず)が1件でもあれば、終了コードは 1。
 import { spawn } from 'node:child_process';
 import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import mqtt from 'mqtt';
-import { coverage, latencyStats, notificationKeys, refusedTopics } from './analyze.mjs';
+import { countDuplicates, coverage, latencyStats, notificationKeys, refusedTopics } from './analyze.mjs';
 
 const args = process.argv.slice(2);
 const mqttUrl = process.env.SMOKE_MQTT_WS ?? 'ws://127.0.0.1:9001';
 const logPath = join(mkdtempSync(join(tmpdir(), 'smoke-')), 'replay.jsonl');
 
-const received = { live: new Map(), ge5: new Map(), ge3: new Map() }; // key -> 受信時刻(最初のもの)
+// key -> { firstAt: 最初の受信時刻, count: 受信回数 }。遅延は最初の受信で測り、重複は回数で数える。
+const received = { live: new Map(), ge5: new Map(), ge3: new Map() };
+let messages = 0; // 受信した通知の総数(重複を含む。通知が出そろったかの判定に使う)
 const topicOf = (t) => (t === 'amedas/live' ? 'live' : t.endsWith('ge5') ? 'ge5' : t.endsWith('ge3') ? 'ge3' : null);
 
 const client = mqtt.connect(mqttUrl);
@@ -32,7 +35,12 @@ client.on('message', (topic, payload) => {
     console.warn(`JSON でない通知を無視しました: ${topic}`);
     return;
   }
-  for (const { key } of notificationKeys(msg)) if (!bucket.has(key)) bucket.set(key, now);
+  messages++;
+  for (const { key } of notificationKeys(msg)) {
+    const r = bucket.get(key);
+    if (r) r.count++;
+    else bucket.set(key, { firstAt: now, count: 1 });
+  }
 });
 
 // 購読が成立する(SUBACK が届く)まで待ってから、setup を始める。待たないと、最初の通知を取りこぼして欠落と誤判定しうる。
@@ -64,7 +72,7 @@ let lastCount = -1;
 let quietSince = Date.now();
 const deadline = Date.now() + drainMaxMs;
 while (Date.now() < deadline) {
-  const n = received.live.size + received.ge5.size + received.ge3.size;
+  const n = messages;
   if (n !== lastCount) {
     lastCount = n;
     quietSince = Date.now();
@@ -77,8 +85,9 @@ const timedOut = Date.now() >= deadline;
 const sent = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((r) => r.status >= 200 && r.status < 300);
 const sentKeys = new Set(sent.map((r) => `${r.id}|${r.sentAt}`));
 const { missing } = coverage(sentKeys, new Set(received.live.keys()));
+const duplicates = countDuplicates(new Map([...received.live].map(([k, v]) => [k, v.count])), sentKeys);
 
-const latencies = sent.map((r) => ({ at: Date.parse(r.sentAt), ms: received.live.get(`${r.id}|${r.sentAt}`) - Date.parse(r.sentAt) })).filter((x) => Number.isFinite(x.ms));
+const latencies = sent.map((r) => ({ at: Date.parse(r.sentAt), ms: received.live.get(`${r.id}|${r.sentAt}`)?.firstAt - Date.parse(r.sentAt) })).filter((x) => Number.isFinite(x.ms));
 const q = Math.floor(latencies.length / 4);
 const first = latencyStats(latencies.slice(0, q).map((x) => x.ms));
 const last = latencyStats(q > 0 ? latencies.slice(-q).map((x) => x.ms) : []); // slice(-0) は全体になるため
@@ -86,9 +95,11 @@ const all = latencyStats(latencies.map((x) => x.ms));
 
 console.log('--- 結果 ---');
 console.log(`書き込み(成功): ${sent.length} 件、通知に現れなかったもの: ${missing.length} 件`);
+console.log(`重複した通知: ${duplicates.count} 件(amedas/live。PATCH 1回につき1回のはず)`);
 console.log(`遅延 ms: 中央値 ${all.median}、p95 ${all.p95}、最大 ${all.max}`);
 console.log(`遅延の中央値 ms: 最初の4分の1 ${first.median}、最後の4分の1 ${last.median}(後半が大きく増えていれば、通知が滞留している)`);
 console.log(`条件付き購読の件数: 5cm 以上 ${received.ge5.size} 件、3cm 以上 ${received.ge3.size} 件`);
 if (missing.length > 0) console.log('欠落の例:', missing.slice(0, 5));
+if (duplicates.count > 0) console.log('重複の例:', duplicates.examples);
 if (timedOut) console.log(`通知を待つ上限(${drainMaxMs}ms)に達したため、打ち切りました(欠落には、遅れて届く通知が含まれる可能性があります)`);
-process.exit(missing.length > 0 || replayCode !== 0 ? 1 : 0);
+process.exit(missing.length > 0 || duplicates.count > 0 || replayCode !== 0 ? 1 : 0);
