@@ -40,12 +40,15 @@ export function createWriter({ client, state, changedOnly, log = null, now = Dat
       if (Object.keys(appendAll).length > 0) {
         const r = await client.appendAttrs(id, appendAll);
         if (!ok(r)) return fail(r.status);
+        // append はブローカーに反映済み。このあとの PATCH が失敗しても、次の書き込みで append し直さないよう、すぐに記録する
+        // (すでにある属性の append を拒むブローカーがある)。dateObserved は last に入れない。
+        for (const k of Object.keys(appendAll)) st.known.add(k);
+        for (const [k, p] of Object.entries(append)) st.last[k] = p.value;
       }
       sentAt = new Date(now()).toISOString();
       const r = await client.patchAttrs(id, { ...patch, dateObserved: observed, sentAt: sentAtProperty(sentAt) });
       if (!ok(r)) return fail(r.status);
-      for (const k of Object.keys(appendAll)) st.known.add(k);
-      for (const [k, p] of Object.entries({ ...patch, ...append })) st.last[k] = p.value;
+      for (const [k, p] of Object.entries(patch)) st.last[k] = p.value;
       record(r.status);
       return true;
     } catch (e) {

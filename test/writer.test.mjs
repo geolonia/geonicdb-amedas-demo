@@ -66,18 +66,41 @@ test('(b) append が失敗したら、PATCH を送らずに失敗を返し、kno
   assert.equal(log.out[0].status, 500);
 });
 
-test('(c) PATCH が失敗したら、失敗を返し、known と last を変えない', async () => {
-  const client = fakeClient({ patch: 404 });
+test('(c) append が成功して PATCH が失敗したら、失敗を返すが、append した属性は known と last に残す(次の書き込みで append し直さない)', async () => {
+  let patchStatus = 404;
+  const client = fakeClient({ patch: () => ({ status: patchStatus, text: '' }) });
   const state = newState(['snowHeight'], { snowHeight: 1 });
   const log = lines();
   const write = createWriter({ client, state, changedOnly: false, log, now: () => NOW });
   assert.equal(await write('chuo', { t: 'x', snowHeight: 3, temperature: -1 }, 't0'), false);
-  assert.deepEqual([...state.get('chuo').known], ['snowHeight']);
-  assert.deepEqual(state.get('chuo').last, { snowHeight: 1 });
+  assert.deepEqual(client.calls.map((c) => c[0]), ['POST', 'PATCH']);
+  // append はブローカーに反映済み。PATCH した snowHeight の値は、失敗したので last に入れない
+  assert.deepEqual([...state.get('chuo').known].sort(), ['dateObserved', 'snowHeight', 'temperature']);
+  assert.deepEqual(state.get('chuo').last, { snowHeight: 1, temperature: -1 });
   assert.equal(log.out[0].status, 404);
+  // 次の書き込みは、同じ属性を append し直さず、PATCH だけを送る
+  patchStatus = 204;
+  client.calls.length = 0;
+  assert.equal(await write('chuo', { t: 'y', snowHeight: 4, temperature: -2 }, 't1'), true);
+  assert.deepEqual(client.calls.map((c) => c[0]), ['PATCH']);
+  assert.deepEqual(Object.keys(client.calls[0][2]).sort(), ['dateObserved', 'sentAt', 'snowHeight', 'temperature']);
+  assert.deepEqual(state.get('chuo').last, { snowHeight: 4, temperature: -2 });
 });
 
-test('(d) 成功したときだけ、known と last を更新する(sentAt は last に入れない)。ログに id、ward、t、sentAt、status を書く', async () => {
+test('(c) changedOnly で PATCH が失敗しても、append した値を last に残し、次のステップで同じ値を書き直さない', async () => {
+  let patchStatus = 500;
+  const client = fakeClient({ patch: () => ({ status: patchStatus, text: '' }) });
+  const state = newState(withObserved(['snowHeight']), { snowHeight: 1 });
+  const write = createWriter({ client, state, changedOnly: true, now: () => NOW });
+  assert.equal(await write('chuo', { t: 'x', snowHeight: 1, temperature: -1 }, 't0'), false);
+  patchStatus = 204;
+  client.calls.length = 0;
+  assert.equal(await write('chuo', { t: 'y', snowHeight: 1, temperature: -1 }, 't1'), true);
+  assert.deepEqual(client.calls.map((c) => c[0]), ['PATCH']);
+  assert.deepEqual(Object.keys(client.calls[0][2]).sort(), ['dateObserved', 'sentAt']);
+});
+
+test('(d) 成功したら、append と PATCH の値を known と last に記録する(sentAt は last に入れない)。ログに id、ward、t、sentAt、status を書く', async () => {
   const client = fakeClient();
   const state = newState(withObserved(['snowHeight']), { snowHeight: 1 });
   const log = lines();
@@ -98,6 +121,8 @@ test('(e) 例外のときは、status: "error" の行をログに書いて、例
   assert.equal(log.out[0].status, 'error');
   assert.equal(log.out[0].id, ID);
   assert.deepEqual(state.get('chuo').last, { snowHeight: 1 });
+  // PATCH の前の append(dateObserved)は成功しているので、known に残す
+  assert.deepEqual([...state.get('chuo').known].sort(), ['dateObserved', 'snowHeight']);
 });
 
 test('(f) changedOnly でも、snowfall1h は毎回書き、sentAt は常に付ける', async () => {
