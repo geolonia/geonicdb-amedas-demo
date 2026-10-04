@@ -73,10 +73,10 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 
 - 別のブローカーだけを使うときは、`docker compose -f compose/docker-compose.yml up -d mosquitto context` で、MQTT と `@context` の配信だけを起動できます。
   その場合、`CONTEXT` は、`http://127.0.0.1:8081/weather.jsonld` のように、そのブローカーから見える URL にします。
-- ホスト(compose の外)で動くブローカーでは、既定値の `mqtt://mosquitto:1883` や `http://context/weather.jsonld` は、そのブローカーから届きません。例えば、ポート 3120 で動くブローカーなら、次のようにします(Mosquitto と context は、上の compose で起動します)。
+- ホスト(compose の外)で動くブローカーでは、既定値の `mqtt://mosquitto:1883` や `http://context/weather.jsonld` は、そのブローカーから届きません。例えば、ポート 4000 で動くブローカーなら、次のようにします(Mosquitto と context は、上の compose で起動します)。
 
   ```bash
-  BROKER_URL=http://localhost:3120 MQTT_URI_BASE=mqtt://localhost:1883 \
+  BROKER_URL=http://localhost:4000 MQTT_URI_BASE=mqtt://localhost:1883 \
   CONTEXT=https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld TENANT=demo \
   npm run smoke -- --interval 1000
   ```
