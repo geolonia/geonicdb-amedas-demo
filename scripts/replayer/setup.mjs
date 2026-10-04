@@ -11,7 +11,7 @@ const isDemoSubscription = (s) => String(s?.notification?.endpoint?.uri ?? '').i
 let config;
 try {
   config = parseConfig(process.argv.slice(2), process.env);
-  const client = createClient(config);
+  const client = createClient({ ...config, timeoutMs: config.requestTimeoutMs });
   const { wards } = loadDemoData(config.dataDir);
 
   const list = await client.listSubscriptions();

@@ -12,15 +12,21 @@ export async function runReplay({
   onWarn,
   maxConsecutiveFailures = 5,
 }) {
-  const t0 = now();
+  let t0 = now();
   const stats = { writes: 0, failed: 0, steps: 0 };
   let consecutive = 0;
   for (let i = 0; i < steps.length; i++) {
-    const due = t0 + i * intervalMs;
+    let due = t0 + i * intervalMs;
     const wait = due - now();
     if (wait > 0) await sleep(wait);
     const lag = Math.max(0, now() - due);
-    if (lag > Math.max(1000, 2 * intervalMs)) onWarn?.(`ステップ ${i + 1}/${steps.length}: ${lag}ms 遅れています`);
+    // 大きく遅れたとき(スリープや一時停止のあと)は、予定を遅れの分だけ後ろへずらす。
+    // ずらさないと、遅れたステップの書き込みが、間を空けずに続けて出る。
+    if (lag > 3 * intervalMs) {
+      onWarn?.(`ステップ ${i + 1}/${steps.length}: ${lag}ms 遅れたため、以降の予定を ${lag}ms 後ろへずらします`);
+      t0 += lag;
+      due += lag;
+    } else if (lag > Math.max(1000, 2 * intervalMs)) onWarn?.(`ステップ ${i + 1}/${steps.length}: ${lag}ms 遅れています`);
     const { writes } = steps[i];
     for (const [k, { ward, obs }] of writes.entries()) {
       if (k > 0) {

@@ -50,13 +50,18 @@ test('購読は3本: 全件、5cm 以上、3cm 以上(条件付きは watchedAtt
   assert.deepEqual(subs[1].watchedAttributes, ['snowfall1h']);
   for (const s of subs) {
     assert.equal(s.type, 'Subscription');
-    assert.deepEqual(s.entities, [{ type: 'WeatherObserved' }]);
+    assert.deepEqual(s.entities, [{ type: 'WeatherObserved', idPattern: '^urn:ngsi-ld:WeatherObserved:sapporo-' }]);
     assert.equal(s.notification.format, 'normalized');
     assert.deepEqual(s.notification.endpoint.notifierInfo, [
       { key: 'MQTT-Version', value: 'mqtt5.0' },
       { key: 'MQTT-QoS', value: '0' },
     ]);
   }
+});
+
+test('MQTT の宛先の末尾の / は除く', () => {
+  const subs = buildSubscriptions({ context: CTX, mqttBase: 'mqtt://host:1883/', mqttVersion: 'mqtt5.0' });
+  assert.equal(subs[0].notification.endpoint.uri, 'mqtt://host:1883/amedas/live');
 });
 
 test('planWrite: すでにある属性は patch、まだない属性は append に分ける', () => {

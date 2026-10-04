@@ -14,6 +14,14 @@ test('引数がなければ既定値(Stellio の compose に合わせた値)を�
   assert.equal(c.intervalMs, DEFAULTS.interval);
   assert.equal(c.tenant, undefined);
   assert.equal(c.changedOnly, false);
+  assert.equal(c.requestTimeoutMs, 10000);
+});
+
+test('HTTP のタイムアウトは、--request-timeout と REPLAY_REQUEST_TIMEOUT_MS で変えられる', () => {
+  assert.equal(parseConfig([], { REPLAY_REQUEST_TIMEOUT_MS: '3000' }).requestTimeoutMs, 3000);
+  assert.equal(parseConfig(['--request-timeout', '2500'], { REPLAY_REQUEST_TIMEOUT_MS: '3000' }).requestTimeoutMs, 2500);
+  assert.throws(() => parseConfig(['--request-timeout', '0'], {}), /--request-timeout/);
+  assert.throws(() => parseConfig(['--request-timeout', 'x'], {}), /--request-timeout/);
 });
 
 test('引数は環境変数より優先され、環境変数は既定値より優先される', () => {

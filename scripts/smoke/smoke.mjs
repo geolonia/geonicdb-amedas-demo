@@ -31,7 +31,7 @@ client.on('message', (topic, payload) => {
 
 const run = (script, extra = []) =>
   new Promise((resolve) => {
-    const p = spawn('node', [script, ...args, ...extra], { stdio: 'inherit' });
+    const p = spawn(process.execPath, [script, ...args, ...extra], { stdio: 'inherit' });
     p.on('exit', (code) => resolve(code));
   });
 
@@ -64,7 +64,7 @@ const { missing } = coverage(sentKeys, new Set(received.live.keys()));
 const latencies = sent.map((r) => ({ at: Date.parse(r.sentAt), ms: received.live.get(`${r.id}|${r.sentAt}`) - Date.parse(r.sentAt) })).filter((x) => Number.isFinite(x.ms));
 const q = Math.floor(latencies.length / 4);
 const first = latencyStats(latencies.slice(0, q).map((x) => x.ms));
-const last = latencyStats(latencies.slice(-q).map((x) => x.ms));
+const last = latencyStats(q > 0 ? latencies.slice(-q).map((x) => x.ms) : []); // slice(-0) は全体になるため
 const all = latencyStats(latencies.map((x) => x.ms));
 
 console.log('--- 結果 ---');

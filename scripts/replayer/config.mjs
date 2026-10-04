@@ -13,6 +13,8 @@ export const DEFAULTS = Object.freeze({
   // Stellio は通知1件に約 0.45 秒かかり、区あたりの枠(interval / 10)との余裕が小さいため、余裕のある 6000ms にした。4000ms は滞留する。
   interval: 6000,
   dataDir: 'data',
+  // ブローカーへの1回の HTTP 要求のタイムアウト(ミリ秒)
+  requestTimeout: 10000,
 });
 
 const OPTIONS = {
@@ -27,6 +29,7 @@ const OPTIONS = {
   'data-dir': { type: 'string' },
   log: { type: 'string' },
   'changed-only': { type: 'boolean' },
+  'request-timeout': { type: 'string' },
 };
 
 export function parseConfig(argv, env = {}) {
@@ -39,6 +42,8 @@ export function parseConfig(argv, env = {}) {
   const intervalMs = Number(pick('interval', 'REPLAY_INTERVAL_MS', DEFAULTS.interval));
 
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) throw new Error('--interval は正の数(ミリ秒)で指定してください');
+  const requestTimeoutMs = Number(pick('request-timeout', 'REPLAY_REQUEST_TIMEOUT_MS', DEFAULTS.requestTimeout));
+  if (!Number.isFinite(requestTimeoutMs) || requestTimeoutMs <= 0) throw new Error('--request-timeout は正の数(ミリ秒)で指定してください');
   // タイムゾーンのない日時は、実行する機のタイムゾーンで解釈され、会場の機で再生範囲がずれる。必ず指定させる。
   const hasOffset = (s) => /(Z|[+-]\d{2}:?\d{2})$/.test(s);
   if (Number.isNaN(Date.parse(from)) || !hasOffset(from)) throw new Error(`--from を、+09:00 のようなタイムゾーンつきの日時で指定してください: ${from}`);
@@ -58,5 +63,6 @@ export function parseConfig(argv, env = {}) {
     dataDir: pick('data-dir', 'DATA_DIR', DEFAULTS.dataDir),
     logPath: values.log,
     changedOnly: values['changed-only'] ?? false,
+    requestTimeoutMs,
   };
 }

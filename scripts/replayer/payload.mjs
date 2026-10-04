@@ -33,7 +33,8 @@ function subscription(context, mqttBase, mqttVersion, topic, extra = {}) {
   return {
     '@context': context,
     type: 'Subscription',
-    entities: [{ type: 'WeatherObserved' }],
+    // このデモのエンティティだけ(同じブローカーにある、別のデータの WeatherObserved を混ぜない)
+    entities: [{ type: 'WeatherObserved', idPattern: '^urn:ngsi-ld:WeatherObserved:sapporo-' }],
     ...extra,
     notification: {
       format: 'normalized',
@@ -52,7 +53,8 @@ function subscription(context, mqttBase, mqttVersion, topic, extra = {}) {
 // 条件付き購読は、条件が成立している間は書き込みのたびに通知される。
 // snowfall1h を正時にだけ書き、watchedAttributes で絞ることで、「その時間に条件を満たした」通知になる。
 export function buildSubscriptions({ context, mqttBase, mqttVersion }) {
-  const mk = (topic, extra) => subscription(context, mqttBase, mqttVersion, topic, extra);
+  const base = String(mqttBase).replace(/\/+$/, ''); // 末尾の / を除く(mqtt://host:1883/ → mqtt://host:1883/amedas/live)
+  const mk = (topic, extra) => subscription(context, base, mqttVersion, topic, extra);
   const cond = (threshold) => ({ watchedAttributes: ['snowfall1h'], q: `snowfall1h>=${threshold}` });
   return [
     // replay は書き込みごとに sentAt を更新する。sentAt だけを監視すれば、PATCH 1回につき通知は1回になる

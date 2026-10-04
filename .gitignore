@@ -9,3 +9,5 @@ replay-*.jsonl
 .DS_Store
 .claude/
 .superpowers/
+*.pem
+*.key

@@ -69,6 +69,26 @@ test('1件の書き込みが枠を超えても、待たずに続け、あとの�
   ]);
 });
 
+test('大きく遅れたら(3 × intervalMs 超)、警告して予定を後ろへずらし、書き込みの間隔を保つ', async () => {
+  const clock = fakeClock();
+  const calls = [];
+  const warns = [];
+  let stalled = false;
+  const write = async (ward, obs) => {
+    calls.push([ward + obs.t, clock.now()]);
+    if (!stalled && ward === 'b') { stalled = true; clock.advance(10_000); } // 最初のステップの b のあとで止まる
+    return true;
+  };
+  await runReplay({ steps: steps(3), intervalMs: 1000, write, onWarn: (m) => warns.push(m), ...clock });
+  // ステップ1は 1_010_500 に始まる(遅れ 9,500ms)。そこから、元の間隔(区は 500ms、ステップは 1,000ms)で書く。
+  assert.deepEqual(calls, [
+    ['at0', 1_000_000], ['bt0', 1_000_500],
+    ['at1', 1_010_500], ['bt1', 1_011_000],
+    ['at2', 1_011_500], ['bt2', 1_012_000],
+  ]);
+  assert.ok(warns.some((m) => /ずらし/.test(m)));
+});
+
 test('遅れが大きいときは警告する', async () => {
   const clock = fakeClock();
   const warns = [];
