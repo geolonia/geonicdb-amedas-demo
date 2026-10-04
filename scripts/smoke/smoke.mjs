@@ -7,7 +7,7 @@ import { readFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import mqtt from 'mqtt';
-import { coverage, latencyStats, notificationKeys } from './analyze.mjs';
+import { coverage, latencyStats, notificationKeys, refusedTopics } from './analyze.mjs';
 
 const args = process.argv.slice(2);
 const mqttUrl = process.env.SMOKE_MQTT_WS ?? 'ws://127.0.0.1:9001';
@@ -21,7 +21,6 @@ await new Promise((res, rej) => {
   client.on('connect', res);
   client.on('error', rej);
 });
-client.subscribe(['amedas/live', 'amedas/cond/#']);
 client.on('message', (topic, payload) => {
   const bucket = received[topicOf(topic)];
   if (!bucket) return;
@@ -35,6 +34,17 @@ client.on('message', (topic, payload) => {
   }
   for (const { key } of notificationKeys(msg)) if (!bucket.has(key)) bucket.set(key, now);
 });
+
+// 購読が成立する(SUBACK が届く)まで待ってから、setup を始める。待たないと、最初の通知を取りこぼして欠落と誤判定しうる。
+// メッセージの処理は、購読より前に登録しておく(SUBACK の直後に届く通知も受ける)。
+try {
+  const refused = refusedTopics(await client.subscribeAsync(['amedas/live', 'amedas/cond/#']));
+  if (refused.length > 0) throw new Error(`ブローカーが購読を拒否しました: ${refused.join(', ')}`);
+} catch (e) {
+  console.error(`MQTT の購読に失敗しました(${mqttUrl}): ${e.message}`);
+  client.end(true);
+  process.exit(2);
+}
 
 const run = (script, extra = []) =>
   new Promise((resolve) => {

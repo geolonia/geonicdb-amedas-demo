@@ -45,3 +45,12 @@ test('notificationKeys: 想定外の形(null、配列でない data、null の�
     { key: 'urn:ok|2026-10-05T00:00:00.000Z', sentAt: '2026-10-05T00:00:00.000Z' },
   ]);
 });
+
+test('refusedTopics: SUBACK で拒否された(QoS 128 の)トピックを返す', async () => {
+  const { refusedTopics } = await import('../scripts/smoke/analyze.mjs');
+  assert.deepEqual(refusedTopics([{ topic: 'amedas/live', qos: 0 }, { topic: 'amedas/cond/#', qos: 0 }]), []);
+  assert.deepEqual(refusedTopics([{ topic: 'amedas/live', qos: 0 }, { topic: 'amedas/cond/#', qos: 128 }]), ['amedas/cond/#']);
+  // MQTT 5 の拒否の理由コード(0x80 以上。例: 135 = 認可されていない)も拒否として扱う
+  assert.deepEqual(refusedTopics([{ topic: 'a', qos: 135 }, { topic: 'b', qos: 1 }]), ['a']);
+  assert.deepEqual(refusedTopics([]), []);
+});

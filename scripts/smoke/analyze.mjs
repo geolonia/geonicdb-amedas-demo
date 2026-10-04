@@ -28,3 +28,8 @@ export function notificationKeys(message) {
   }
   return out;
 }
+
+// SUBACK で拒否されたトピックを返す。MQTT 3.1.1 では QoS 128(0x80)、MQTT 5 では 0x80 以上の理由コードが拒否。
+export function refusedTopics(granted) {
+  return granted.filter((g) => g.qos >= 128).map((g) => g.topic);
+}
