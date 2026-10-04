@@ -16,6 +16,8 @@ function fakeClient({ patch = 204, append = 204 } = {}) {
   };
 }
 const newState = (known = [], last = {}) => new Map([['chuo', { known: new Set(known), last: { ...last } }]]);
+// setup が作るエンティティ(引き継ぐ観測値があるとき)は、dateObserved をすでに持つ。
+const withObserved = (known = []) => [...known, 'dateObserved'];
 const lines = () => {
   const out = [];
   return { out, write: (s) => out.push(JSON.parse(s)) };
@@ -23,7 +25,7 @@ const lines = () => {
 
 test('(a) まだない属性の append を先に送り、sentAt は最後の PATCH だけに付ける', async () => {
   const client = fakeClient();
-  const state = newState(['snowHeight']);
+  const state = newState(withObserved(['snowHeight']));
   const write = createWriter({ client, state, changedOnly: false, now: () => NOW });
   const ok = await write('chuo', { t: '2025-11-10T00:00:00Z', snowHeight: 3, temperature: -1 }, 't0');
   assert.equal(ok, true);
@@ -32,21 +34,21 @@ test('(a) まだない属性の append を先に送り、sentAt は最後の PAT
   assert.equal(post[1], ID);
   assert.deepEqual(Object.keys(post[2]), ['temperature']);
   assert.equal(post[2].sentAt, undefined);
-  assert.deepEqual(Object.keys(patch[2]).sort(), ['sentAt', 'snowHeight']);
+  assert.deepEqual(Object.keys(patch[2]).sort(), ['dateObserved', 'sentAt', 'snowHeight']);
   assert.equal(patch[2].sentAt.value['@value'], '2026-10-05T00:00:00.000Z');
 });
 
 test('(a) 更新が append だけのときも、sentAt だけの PATCH を必ず送る(live の購読のきっかけ)', async () => {
   const client = fakeClient();
-  const write = createWriter({ client, state: newState([]), changedOnly: false, now: () => NOW });
+  const write = createWriter({ client, state: newState(withObserved()), changedOnly: false, now: () => NOW });
   assert.equal(await write('chuo', { t: 'x', temperature: -1 }, 't0'), true);
   assert.deepEqual(client.calls.map((c) => c[0]), ['POST', 'PATCH']);
-  assert.deepEqual(Object.keys(client.calls[1][2]), ['sentAt']);
+  assert.deepEqual(Object.keys(client.calls[1][2]).sort(), ['dateObserved', 'sentAt']);
 });
 
 test('append がなければ、PATCH を1回だけ送る', async () => {
   const client = fakeClient();
-  const write = createWriter({ client, state: newState(['temperature']), changedOnly: false, now: () => NOW });
+  const write = createWriter({ client, state: newState(withObserved(['temperature'])), changedOnly: false, now: () => NOW });
   assert.equal(await write('chuo', { t: 'x', temperature: -1 }, 't0'), true);
   assert.deepEqual(client.calls.map((c) => c[0]), ['PATCH']);
 });
@@ -77,11 +79,11 @@ test('(c) PATCH が失敗したら、失敗を返し、known と last を変え�
 
 test('(d) 成功したときだけ、known と last を更新する(sentAt は last に入れない)。ログに id、ward、t、sentAt、status を書く', async () => {
   const client = fakeClient();
-  const state = newState(['snowHeight'], { snowHeight: 1 });
+  const state = newState(withObserved(['snowHeight']), { snowHeight: 1 });
   const log = lines();
   const write = createWriter({ client, state, changedOnly: false, log, now: () => NOW });
   assert.equal(await write('chuo', { t: 'x', snowHeight: 3, temperature: -1 }, 't0'), true);
-  assert.deepEqual([...state.get('chuo').known].sort(), ['snowHeight', 'temperature']);
+  assert.deepEqual([...state.get('chuo').known].sort(), ['dateObserved', 'snowHeight', 'temperature']);
   assert.deepEqual(state.get('chuo').last, { snowHeight: 3, temperature: -1 });
   assert.deepEqual(log.out, [{ id: ID, ward: 'chuo', t: 't0', sentAt: '2026-10-05T00:00:00.000Z', status: 204 }]);
 });
@@ -100,13 +102,65 @@ test('(e) 例外のときは、status: "error" の行をログに書いて、例
 
 test('(f) changedOnly でも、snowfall1h は毎回書き、sentAt は常に付ける', async () => {
   const client = fakeClient();
-  const state = newState(['snowHeight', 'snowfall1h'], { snowHeight: 3, snowfall1h: 0 });
+  const state = newState(withObserved(['snowHeight', 'snowfall1h']), { snowHeight: 3, snowfall1h: 0 });
   const write = createWriter({ client, state, changedOnly: true, now: () => NOW });
   assert.equal(await write('chuo', { t: 'x', snowHeight: 3, snowfall1h: 0 }, 't0'), true);
   assert.deepEqual(client.calls.map((c) => c[0]), ['PATCH']);
-  assert.deepEqual(Object.keys(client.calls[0][2]).sort(), ['sentAt', 'snowfall1h']);
-  // 変わった値がまったくなくても、sentAt だけの PATCH を送る
+  assert.deepEqual(Object.keys(client.calls[0][2]).sort(), ['dateObserved', 'sentAt', 'snowfall1h']);
+  // 変わった値がまったくなくても、sentAt(と dateObserved)だけの PATCH を送る
   client.calls.length = 0;
   assert.equal(await write('chuo', { t: 'y', snowHeight: 3 }, 't1'), true);
-  assert.deepEqual(Object.keys(client.calls[0][2]), ['sentAt']);
+  assert.deepEqual(Object.keys(client.calls[0][2]).sort(), ['dateObserved', 'sentAt']);
+});
+
+const dateObserved = (t) => ({ type: 'Property', value: { '@type': 'DateTime', '@value': t } });
+
+test('(g) sentAt を付けた最後の PATCH には、毎回 dateObserved(そのステップの観測時刻)も付ける', async () => {
+  const client = fakeClient();
+  const state = newState(['snowHeight', 'dateObserved']);
+  const write = createWriter({ client, state, changedOnly: false, now: () => NOW });
+  assert.equal(await write('chuo', { t: '2025-11-18T00:10:00Z', snowHeight: 3, temperature: -1 }, 't0'), true);
+  assert.deepEqual(client.calls.map((c) => c[0]), ['POST', 'PATCH']);
+  assert.equal(client.calls[0][2].dateObserved, undefined);
+  assert.deepEqual(client.calls[1][2].dateObserved, dateObserved('2025-11-18T00:10:00Z'));
+  // dateObserved は last に入れない
+  assert.equal(state.get('chuo').last.dateObserved, undefined);
+});
+
+test('(g) changedOnly で、変わった値がまったくないステップでも、PATCH に dateObserved を付ける', async () => {
+  const client = fakeClient();
+  const state = newState(['snowHeight', 'dateObserved'], { snowHeight: 3 });
+  const write = createWriter({ client, state, changedOnly: true, now: () => NOW });
+  assert.equal(await write('chuo', { t: '2025-11-07T17:50:00Z', snowHeight: 3 }, 't1'), true);
+  assert.deepEqual(client.calls.map((c) => c[0]), ['PATCH']);
+  assert.deepEqual(Object.keys(client.calls[0][2]).sort(), ['dateObserved', 'sentAt']);
+  assert.deepEqual(client.calls[0][2].dateObserved, dateObserved('2025-11-07T17:50:00Z'));
+});
+
+test('(g) エンティティに dateObserved がまだなければ、append で追加し、PATCH にも付ける', async () => {
+  const client = fakeClient();
+  const state = newState(['snowHeight']);
+  const write = createWriter({ client, state, changedOnly: false, now: () => NOW });
+  assert.equal(await write('chuo', { t: '2025-11-18T00:10:00Z', snowHeight: 3 }, 't0'), true);
+  assert.deepEqual(client.calls.map((c) => c[0]), ['POST', 'PATCH']);
+  assert.deepEqual(client.calls[0][2], { dateObserved: dateObserved('2025-11-18T00:10:00Z') });
+  assert.deepEqual(client.calls[1][2].dateObserved, dateObserved('2025-11-18T00:10:00Z'));
+  assert.ok(state.get('chuo').known.has('dateObserved'));
+  // 次の書き込みでは append しない
+  client.calls.length = 0;
+  assert.equal(await write('chuo', { t: '2025-11-18T00:20:00Z', snowHeight: 3 }, 't1'), true);
+  assert.deepEqual(client.calls.map((c) => c[0]), ['PATCH']);
+});
+
+test('initialState: setup と同じ規則で、エンティティにある属性(観測値があれば dateObserved も)と直前の値を作る', async () => {
+  const { initialState } = await import('../scripts/replayer/writer.mjs');
+  const wards = [
+    { ward: { id: 'chuo' }, observations: [{ t: '2025-11-18T00:00:00Z', snowHeight: 1 }, { t: '2025-11-18T00:10:00Z', snowHeight: 2, temperature: -1 }] },
+    { ward: { id: 'kita' }, observations: [{ t: '2025-11-18T01:00:00Z', snowHeight: 5 }] },
+  ];
+  const st = initialState(wards, '2025-11-18T00:30:00Z');
+  assert.deepEqual([...st.get('chuo').known].sort(), ['dateObserved', 'snowHeight', 'temperature']);
+  assert.deepEqual(st.get('chuo').last, { snowHeight: 2, temperature: -1 });
+  assert.deepEqual([...st.get('kita').known], []);
+  assert.deepEqual(st.get('kita').last, {});
 });

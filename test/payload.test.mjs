@@ -88,3 +88,23 @@ test('planWrite(changedOnly): snowfall1h は、値が同じでも毎回書く', 
   const { patch } = planWrite({ known, last: { snowfall1h: 5 }, obs: { t: 'x', snowfall1h: 5 }, changedOnly: true });
   assert.deepEqual(Object.keys(patch), ['snowfall1h']);
 });
+
+test('dateObserved は sentAt と同じ形の DateTime 型の Property', async () => {
+  const { dateObservedProperty } = await import('../scripts/replayer/payload.mjs');
+  assert.deepEqual(dateObservedProperty('2025-11-18T05:00:00Z'), {
+    type: 'Property', value: { '@type': 'DateTime', '@value': '2025-11-18T05:00:00Z' },
+  });
+});
+
+test('エンティティ: dateObserved は、引き継いだ属性の観測時刻のうち最も新しいもの。属性がなければ付けない', () => {
+  const base = { ward: { id: 'kita', name: '北区' }, station: { coordinates: [141.35, 43.14] }, context: CTX, sentAt: '2026-10-05T00:00:00.000Z' };
+  const e = buildEntity({
+    ...base,
+    attrs: {
+      snowHeight: { value: 30, t: '2025-11-18T05:50:00Z' },
+      snowfall1h: { value: 0, t: '2025-11-18T05:00:00Z' },
+    },
+  });
+  assert.deepEqual(e.dateObserved, { type: 'Property', value: { '@type': 'DateTime', '@value': '2025-11-18T05:50:00Z' } });
+  assert.equal(buildEntity({ ...base, attrs: {} }).dateObserved, undefined);
+});

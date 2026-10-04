@@ -3,8 +3,8 @@ import { createWriteStream } from 'node:fs';
 import { parseConfig } from './config.mjs';
 import { createClient } from './client.mjs';
 import { loadDemoData } from './data.mjs';
-import { buildSteps, carryForward } from './schedule.mjs';
-import { createWriter } from './writer.mjs';
+import { buildSteps } from './schedule.mjs';
+import { createWriter, initialState } from './writer.mjs';
 import { runReplay } from './run.mjs';
 
 let log = null;
@@ -21,13 +21,7 @@ try {
     });
   }
 
-  // setup が作ったエンティティにある属性と、直前の値を、同じ規則(carryForward)で再現する。
-  const state = new Map(
-    wards.map(({ ward, observations }) => {
-      const prior = carryForward(observations, config.from);
-      return [ward.id, { known: new Set(Object.keys(prior)), last: Object.fromEntries(Object.entries(prior).map(([k, v]) => [k, v.value])) }];
-    }),
-  );
+  const state = initialState(wards, config.from);
   const write = createWriter({ client, state, changedOnly: config.changedOnly, log, onWarn: (m) => console.warn(m) });
 
   console.log(`再生: ${steps.length} ステップ、${config.from} 〜 ${config.to}、${config.intervalMs}ms/ステップ`);

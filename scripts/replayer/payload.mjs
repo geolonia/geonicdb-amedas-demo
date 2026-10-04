@@ -16,6 +16,11 @@ export const attrProperty = (key, value, observedAt) => ({ type: 'Property', val
 // 配信の遅延を測るための、書き込み時刻。
 export const sentAtProperty = (iso) => ({ type: 'Property', value: { '@type': 'DateTime', '@value': iso } });
 
+// 観測時刻(FIWARE の WeatherObserved の dateObserved)。書き込みのたびに付ける。
+// 属性ごとの observedAt は、値を書いた属性でしか新しくならない(--changed-only で値が変わらないステップなど)。
+// dateObserved は、それとは別に、そのステップの観測時刻を明示する。
+export const dateObservedProperty = (iso) => ({ type: 'Property', value: { '@type': 'DateTime', '@value': iso } });
+
 export function buildEntity({ ward, station, context, attrs, sentAt }) {
   const entity = {
     '@context': context,
@@ -24,7 +29,12 @@ export function buildEntity({ ward, station, context, attrs, sentAt }) {
     name: { type: 'Property', value: ward.name },
     location: { type: 'GeoProperty', value: { type: 'Point', coordinates: station.coordinates } },
   };
-  for (const [key, { value, t }] of Object.entries(attrs)) entity[key] = attrProperty(key, value, t);
+  let latest = null;
+  for (const [key, { value, t }] of Object.entries(attrs)) {
+    entity[key] = attrProperty(key, value, t);
+    if (latest === null || Date.parse(t) > Date.parse(latest)) latest = t;
+  }
+  if (latest !== null) entity.dateObserved = dateObservedProperty(latest);
   entity.sentAt = sentAtProperty(sentAt);
   return entity;
 }
