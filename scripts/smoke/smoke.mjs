@@ -26,7 +26,14 @@ client.on('message', (topic, payload) => {
   const bucket = received[topicOf(topic)];
   if (!bucket) return;
   const now = Date.now();
-  for (const { key } of notificationKeys(JSON.parse(payload.toString()))) if (!bucket.has(key)) bucket.set(key, now);
+  let msg;
+  try {
+    msg = JSON.parse(payload.toString());
+  } catch {
+    console.warn(`JSON でない通知を無視しました: ${topic}`);
+    return;
+  }
+  for (const { key } of notificationKeys(msg)) if (!bucket.has(key)) bucket.set(key, now);
 });
 
 const run = (script, extra = []) =>

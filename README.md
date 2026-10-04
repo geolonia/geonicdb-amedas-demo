@@ -126,7 +126,7 @@ npm run build:data    # 札幌市の CKAN と国土数値情報から data/ を�
   Stellio(`http://127.0.0.1:8080`)は認証なしで接続できるため、ブラウザーで開いた任意の Web ページからも接続できます。
 - Stellio の compose(upstream のもの)は、コンテナ名(`stellio-*`)とボリューム名(`stellio-postgres-storage`)が固定です。
   同じ機で、別の Stellio の compose を同時に動かすと衝突します。
-- Kafka のポート(`127.0.0.1:39092`)はホストに公開していますが、Kafka が広告するアドレスと合わないため、ホストのクライアントからは使えません。
+- Kafka のポートは `127.0.0.1:29092` に公開しています(Kafka が広告するアドレスと同じ番号です)。同じ番号を使う別の Kafka が手元で動いていると、起動に失敗します。その場合は、`compose/stellio/stellio.env` の `KAFKA_PORT` を変えてください(ホストの Kafka クライアントからは使えなくなりますが、Stellio の動作には影響しません)。
 - `compose/stellio/` のファイルは、Stellio の Apache License 2.0 のファイルです([compose/NOTICE.md](compose/NOTICE.md))。
 
 ## データの出典
