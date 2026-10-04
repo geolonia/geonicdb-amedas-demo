@@ -15,11 +15,16 @@ const COLUMNS = [
 
 // 日付は YYYY-MM-DD、時刻は H:MM(ゼロ埋めなし。24:00 がある)。どちらも JST。
 // Date.UTC は時の繰り上がりを扱うため、24:00 は自然に翌日の 00:00 になる。
+// ただし Date.UTC は範囲外の値(2/30、24:10、12:60 など)も別の日時に正規化してしまうため、先に範囲を確かめる。
 export function toUtcIso(date, time, lineNo = 0) {
   const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   const t = /^(\d{1,2}):(\d{2})$/.exec(time);
   if (!d || !t) throw new Error(`${lineNo} 行目: 日時の形式が想定と異なります: ${date} ${time}`);
-  const ms = Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3]), Number(t[1]) - 9, Number(t[2]));
+  const [y, mo, day, h, mi] = [d[1], d[2], d[3], t[1], t[2]].map(Number);
+  const daysInMonth = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  const valid = mo >= 1 && mo <= 12 && day >= 1 && day <= daysInMonth && h <= 24 && mi <= 59 && (h < 24 || mi === 0);
+  if (!valid) throw new Error(`${lineNo} 行目: 日時の値が範囲外です: ${date} ${time}`);
+  const ms = Date.UTC(y, mo - 1, day, h - 9, mi);
   return new Date(ms).toISOString().replace('.000Z', 'Z');
 }
 
