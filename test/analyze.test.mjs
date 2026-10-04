@@ -34,3 +34,14 @@ test('notificationKeys: 封筒のない通知にも対応し、値が文字列�
 test('notificationKeys: sentAt のないエンティティは除く', () => {
   assert.deepEqual(notificationKeys({ body: { data: [{ id: 'urn:c' }] } }), []);
 });
+
+test('notificationKeys: 想定外の形(null、配列でない data、null のエンティティ)でも例外を投げず、読めるものだけ返す', () => {
+  assert.deepEqual(notificationKeys(null), []);
+  assert.deepEqual(notificationKeys(42), []);
+  assert.deepEqual(notificationKeys('text'), []);
+  assert.deepEqual(notificationKeys({ body: null }), []);
+  assert.deepEqual(notificationKeys({ data: { id: 'urn:x' } }), []);
+  assert.deepEqual(notificationKeys({ body: { data: [null, 7, { id: 'urn:ok', sentAt: { value: '2026-10-05T00:00:00.000Z' } }] } }), [
+    { key: 'urn:ok|2026-10-05T00:00:00.000Z', sentAt: '2026-10-05T00:00:00.000Z' },
+  ]);
+});

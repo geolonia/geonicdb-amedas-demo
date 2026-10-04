@@ -16,11 +16,13 @@ export function coverage(sentKeys, receivedKeys) {
 
 // 通知のメッセージから、(エンティティ ID, sentAt)の組を取り出す。
 // ブローカーによって、通知が {"body":{…},"metadata":{…}} の封筒に入っている場合と、そうでない場合がある。
+// 想定外の形(null、配列でない data、null のエンティティなど)は、例外にせず、読めるものだけを返す
+// (ローカルの MQTT ブローカーは匿名で publish できるため、別のクライアントのメッセージも届きうる)。
 export function notificationKeys(message) {
-  const n = message.body ?? message;
+  const n = message?.body ?? message;
   const out = [];
-  for (const e of n.data ?? []) {
-    const raw = e.sentAt?.value;
+  for (const e of Array.isArray(n?.data) ? n.data : []) {
+    const raw = e?.sentAt?.value;
     const sentAt = typeof raw === 'string' ? raw : raw?.['@value'];
     if (sentAt) out.push({ key: `${e.id}|${sentAt}`, sentAt });
   }
