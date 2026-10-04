@@ -525,3 +525,21 @@ body {
     padding: 4px 12px;
   }
 }
+
+/* ---- 当日の最新値(Task 14) ---- */
+#live-widget {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+#live-widget .live-value {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+#live-widget .live-meta,
+#live-widget .live-source {
+  font-size: 11px;
+  color: var(--dim);
+}

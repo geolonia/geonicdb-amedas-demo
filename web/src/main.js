@@ -19,6 +19,7 @@ import { createHud } from './panels/hud.js';
 import { installHitEffects } from './effects/hit-effects.js';
 import { installControls } from './panels/controls.js';
 import { installLog } from './panels/log.js';
+import { installLiveWidget } from './live-widget.js';
 
 async function main() {
   // 現在時刻の時計は、データを読む前に始める(読み込みに失敗しても止めない)
@@ -116,6 +117,7 @@ async function main() {
   installHitEffects(app);
   installControls(app);
   installLog(app);
+  installLiveWidget(app);
 }
 
 main().catch((e) => {
