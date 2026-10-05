@@ -11,7 +11,7 @@ import mqtt from 'mqtt';
 import { loadDemoData } from '../replayer/data.mjs';
 import { buildSteps, carryForward } from '../replayer/schedule.mjs';
 import { DEFAULTS } from '../replayer/config.mjs';
-import { applyObservation, notifiedEntity, notificationMessage, topicsForWrite, TOPIC } from './messages.mjs';
+import { applyObservation, notifiedEntity, notificationMessage, topicsForWrite, TOPIC, CLIENT_OPTIONS } from './messages.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -36,7 +36,7 @@ const steps = buildSteps(byWard, values.from, values.to);
 const state = new Map(wards.map((w) => [w.ward.id, Object.fromEntries(Object.entries(carryForward(w.observations, values.from)))]));
 const meta = new Map(wards.map((w) => [w.ward.id, w]));
 
-const client = await mqtt.connectAsync(values.mqtt);
+const client = await mqtt.connectAsync(values.mqtt, CLIENT_OPTIONS);
 let seq = 0;
 const publish = async (topic, wardId, dateObserved) => {
   const { ward, station } = meta.get(wardId);
@@ -45,29 +45,36 @@ const publish = async (topic, wardId, dateObserved) => {
   await client.publishAsync(topic, JSON.stringify(notificationMessage(e, { bare: values.bare, seq: ++seq, notifiedAt: now })), { qos: 0 });
 };
 
-if (values['setup-notice']) {
-  const attrs = state.get('kiyota');
-  const latest = Object.values(attrs).map((a) => a.t).sort().at(-1);
-  await publish(TOPIC.live, 'kiyota', latest);
-  console.log(`setup の余分な通知(清田区、${latest})を出しました。3秒後に再生を始めます`);
-  await sleep(3000);
-}
+try {
+  if (values['setup-notice']) {
+    const attrs = state.get('kiyota');
+    const latest = Object.values(attrs).map((a) => a.t).sort().at(-1);
+    await publish(TOPIC.live, 'kiyota', latest);
+    console.log(`setup の余分な通知(清田区、${latest})を出しました。3秒後に再生を始めます`);
+    await sleep(3000);
+  }
 
-const t0 = Date.now();
-const counts = { live: 0, ge5: 0, ge3: 0 };
-for (let i = 0; i < steps.length; i++) {
-  const { t, writes } = steps[i];
-  for (const [k, { ward, obs }] of writes.entries()) {
-    const due = t0 + i * intervalMs + (k * intervalMs) / writes.length;
-    await sleep(Math.max(0, due - Date.now()));
-    state.set(ward, applyObservation(state.get(ward), obs));
-    const topics = topicsForWrite(obs, values.order);
-    for (const [j, topic] of topics.entries()) {
-      if (j > 0 && gapMs > 0) await sleep(gapMs);
-      await publish(topic, ward, t);
-      counts[topic === TOPIC.live ? 'live' : topic === TOPIC.ge5 ? 'ge5' : 'ge3']++;
+  const t0 = Date.now();
+  const counts = { live: 0, ge5: 0, ge3: 0 };
+  for (let i = 0; i < steps.length; i++) {
+    const { t, writes } = steps[i];
+    for (const [k, { ward, obs }] of writes.entries()) {
+      const due = t0 + i * intervalMs + (k * intervalMs) / writes.length;
+      await sleep(Math.max(0, due - Date.now()));
+      state.set(ward, applyObservation(state.get(ward), obs));
+      const topics = topicsForWrite(obs, values.order);
+      for (const [j, topic] of topics.entries()) {
+        if (j > 0 && gapMs > 0) await sleep(gapMs);
+        await publish(topic, ward, t);
+        counts[topic === TOPIC.live ? 'live' : topic === TOPIC.ge5 ? 'ge5' : 'ge3']++;
+      }
     }
   }
+  console.log(`完了: ${steps.length} ステップ、live ${counts.live} 件、ge5 ${counts.ge5} 件、ge3 ${counts.ge3} 件`);
+  await client.endAsync();
+} catch (e) {
+  // 配信の途中で接続が切れたときも、接続を片付けて(強制終了)、失敗として終わる
+  console.error(`配信を中断しました: ${e.message}`);
+  process.exitCode = 1;
+  await client.endAsync(true);
 }
-console.log(`完了: ${steps.length} ステップ、live ${counts.live} 件、ge5 ${counts.ge5} 件、ge3 ${counts.ge3} 件`);
-await client.endAsync();

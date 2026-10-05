@@ -57,3 +57,5 @@ export function topicsForWrite(obs, order = 'strong-first') {
   if (order === 'weak-first') cond.reverse();
   return order === 'live-first' ? [TOPIC.live, ...cond] : [...cond, TOPIC.live];
 }
+// 接続が切れている間の QoS 0 の配信を、キューに溜めずにエラーにする(既定では再接続まで publishAsync が終わらず、終了処理に進めない)
+export const CLIENT_OPTIONS = Object.freeze({ queueQoSZero: false });

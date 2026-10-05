@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyObservation, notifiedEntity, notificationMessage, topicsForWrite, TOPIC } from '../scripts/fake-notify/messages.mjs';
+import mqtt from 'mqtt';
+import { applyObservation, notifiedEntity, notificationMessage, topicsForWrite, TOPIC, CLIENT_OPTIONS } from '../scripts/fake-notify/messages.mjs';
 import { normalizeMessage, isNewSnowfall } from '../web/src/lib/notification.js';
 
 const ward = { id: 'kita', name: '北区' };
@@ -36,4 +37,20 @@ test('topicsForWrite: 順序の3つの型と、条件の判定', () => {
   assert.deepEqual(topicsForWrite({ snowfall1h: 4 }), [TOPIC.ge3, TOPIC.live]);
   assert.deepEqual(topicsForWrite({ snowfall1h: 2 }), [TOPIC.live]);
   assert.deepEqual(topicsForWrite({ snowHeight: 9 }), [TOPIC.live]);
+});
+
+test('接続していない間の配信(QoS 0)は、キューに溜めずにエラーになる(終了処理に進める)', async () => {
+  const client = mqtt.connect('mqtt://127.0.0.1:1', { ...CLIENT_OPTIONS, reconnectPeriod: 0 });
+  client.on('error', () => {});
+  try {
+    const hung = Symbol('hung');
+    const r = await Promise.race([
+      client.publishAsync('t', 'x', { qos: 0 }).then(() => 'published', (e) => e),
+      new Promise((resolve) => setTimeout(resolve, 3000, hung)),
+    ]);
+    assert.notEqual(r, hung, 'publishAsync が再接続まで終わらない');
+    assert.ok(r instanceof Error, String(r));
+  } finally {
+    await client.endAsync(true);
+  }
 });
