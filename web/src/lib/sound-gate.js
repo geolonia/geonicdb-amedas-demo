@@ -22,3 +22,25 @@ export function createChimeLimiter({ minGapMs = 250, maxVoices = 3, durationMs =
     },
   };
 }
+
+// 鳴らす判定を済ませたキー(区と観測時刻)の記憶。判定のあとに同じ書き込みの ge5 が届いても(upgrade)、鳴らし直さない。
+// ttlMs(dedupe の repeatAfterMs と同じ 60 秒)を過ぎたキーは、setup をやり直した再生とみなして、再び鳴らせる。
+// 件数の上限(maxKeys)を超えたら古いものから捨て、期限切れも add のときに捨てる(増え続けない)。
+export function createSoundedKeys({ maxKeys = 200, ttlMs = 60_000 } = {}) {
+  const at = new Map(); // key -> 判定した時刻(挿入順 = 時刻順)
+  return {
+    has(key, now) {
+      const t = at.get(key);
+      return t !== undefined && now - t <= ttlMs;
+    },
+    add(key, now) {
+      at.delete(key);
+      at.set(key, now);
+      for (const [k, t] of at) {
+        if (now - t <= ttlMs && at.size <= maxKeys) break;
+        at.delete(k);
+      }
+    },
+    size: () => at.size,
+  };
+}

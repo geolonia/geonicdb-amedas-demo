@@ -2,8 +2,9 @@
 // ブラウザーは、利用者の操作なしでは音を出さない。発表の冒頭に「音を有効化」を1回押す(ページを読み直したら、また押す)。
 // 同じ書き込みの ge3 と ge5 が続けて届いたとき(封筒のないブローカーでは順不同)に二度鳴らさないよう、
 // 最初の通知から 200ms 待って、その時点の強い方で1回だけ鳴らす(画面の演出は待たない)。
+// 待ったあとに届く同じ書き込みの通知(Stellio では ge5 が約 430ms 後)は、判定済みのキーとして鳴らさない(60 秒後の再表示では鳴らす)。
 // 大量の通知や隠れたタブで溜まらないよう、master の音量・間引き・同時数の上限・鮮度の確認・タブの表示の確認を入れる(lib/sound-gate.js)。
-import { isFresh, createChimeLimiter } from '../lib/sound-gate.js';
+import { isFresh, createChimeLimiter, createSoundedKeys } from '../lib/sound-gate.js';
 
 const SETTLE_MS = 200;
 
@@ -12,6 +13,7 @@ export function installSound(app) {
   let master = null;
   let on = false;
   const limiter = createChimeLimiter();
+  const sounded = createSoundedKeys(); // 判定を済ませたキー。発音後に届く同じ書き込みの upgrade では鳴らさない
   const pending = new Map(); // hit.key -> { tier, receivedAt }
   const visible = () => document.visibilityState === 'visible';
 
@@ -65,7 +67,7 @@ export function installSound(app) {
   });
 
   app.on('hit', (hit, obs) => {
-    if (!on || !visible()) return;
+    if (!on || !visible() || sounded.has(hit.key, Date.now())) return;
     const known = pending.get(hit.key);
     const tier = hit.tier === 'ge5' || known?.tier === 'ge5' ? 'ge5' : 'ge3';
     pending.set(hit.key, { tier, receivedAt: known?.receivedAt ?? obs?.receivedAt ?? Date.now() });
@@ -76,6 +78,7 @@ export function installSound(app) {
         // 待っている間にオフ・タブが隠れた、または古くなっていたら鳴らさない
         if (on && visible() && isFresh(p.receivedAt, Date.now()) && limiter.admit(p.tier, Date.now())) chime(p.tier);
       } finally {
+        sounded.add(hit.key, Date.now());
         pending.delete(hit.key);
       }
     }, SETTLE_MS);
