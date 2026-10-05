@@ -48,7 +48,7 @@ function good(pair) {
 }
 
 // 点のファイルの JSON から、latestKey 以前で最も新しい観測を読む。
-// 戻り値: { time: '2026-10-04 21:00 JST', temperature, wind, windDirection } | null(気温も風もなければ null)
+// 戻り値: { time: '2026-10-04 21:00 JST', observedAt: '2026-10-04T21:00:00+09:00', temperature, wind, windDirection } | null(気温も風もなければ null)
 export function parsePoint(json, latestKey) {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return null;
   const keys = Object.keys(json).filter((k) => /^\d{14}$/.test(k) && (!latestKey || k <= latestKey)).sort();
@@ -62,6 +62,7 @@ export function parsePoint(json, latestKey) {
   const windDirection = Number.isInteger(dir) && dir >= 0 && dir <= 16 ? WIND_DIRECTIONS[dir] : null;
   return {
     time: `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)} ${key.slice(8, 10)}:${key.slice(10, 12)} JST`,
+    observedAt: `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}T${key.slice(8, 10)}:${key.slice(10, 12)}:${key.slice(12, 14)}+09:00`,
     temperature,
     wind,
     windDirection,
@@ -96,7 +97,9 @@ export async function loadLatest(fetchImpl = globalThis.fetch, { timeoutMs = 800
     if (!latest || !isFresh(latestText, nowMs)) return null;
     const text = await get(latest.url);
     if (text === null) return null;
-    return parsePoint(JSON.parse(text), latest.key);
+    const point = parsePoint(JSON.parse(text), latest.key);
+    // 点のデータ自体の観測時刻にも同じ判定を適用する(latest_time.txt が新しくても、点の最後の観測が古いことがある)
+    return point && isFresh(point.observedAt, nowMs) ? point : null;
   } catch {
     return null;
   }

@@ -22,7 +22,7 @@ test('latest_time.txt が想定外の形なら null', () => {
 
 test('実データ: 気温と風を読み、積雪(品質が 0 でない)は読まない', () => {
   const p = parsePoint(sample, '20261004210000');
-  assert.deepEqual(p, { time: '2026-10-04 21:00 JST', temperature: 12, wind: 0.9, windDirection: '南' });
+  assert.deepEqual(p, { time: '2026-10-04 21:00 JST', observedAt: '2026-10-04T21:00:00+09:00', temperature: 12, wind: 0.9, windDirection: '南' });
   assert.equal('snow' in p, false);
   assert.equal(widgetText(p), '気温 12.0℃ ・ 風 南 0.9m/s');
 });
@@ -41,7 +41,7 @@ test('latestKey 以前で最も新しい観測を使う', () => {
 
 test('品質が 0 でない値と、壊れた値は使わない', () => {
   const p = parsePoint({ '20261004210000': { temp: [12, 1], wind: [3, 0], windDirection: [99, 0] } }, '20261004210000');
-  assert.deepEqual(p, { time: '2026-10-04 21:00 JST', temperature: null, wind: 3, windDirection: null });
+  assert.deepEqual(p, { time: '2026-10-04 21:00 JST', observedAt: '2026-10-04T21:00:00+09:00', temperature: null, wind: 3, windDirection: null });
   assert.equal(widgetText(p), '気温 — ・ 風 3.0m/s');
 });
 
@@ -98,4 +98,21 @@ test('loadLatest: 観測時刻が古い(3日前)なら、値が読めても null
   const fetchOld = fakeFetch({ [LATEST_TIME_URL]: '2026-10-04T21:00:00+09:00', [POINT_URL]: JSON.stringify(sample) });
   assert.equal(await loadLatest(fetchOld, { nowMs: NOW + 3 * 24 * 3600_000 }), null);
   assert.notEqual(await loadLatest(fetchOld, { nowMs: NOW }), null);
+});
+
+// 観測点のデータ自体の時刻にも、同じ鮮度の判定(3 時間)を適用する(latest_time.txt が新しくても、点の最後の観測が古いことがある)
+test('loadLatest: latest_time は新しくても、点の最後の観測が 3 時間より古ければ null', async () => {
+  const url = 'https://www.jma.go.jp/bosai/amedas/data/point/14163/20261005_00.json';
+  const json = JSON.stringify({ '20261005000000': { temp: [3.1, 0], wind: [1, 0], windDirection: [8, 0] } });
+  const f = fakeFetch({ [LATEST_TIME_URL]: '2026-10-05T02:50:00+09:00', [url]: json });
+  assert.equal(await loadLatest(f, { nowMs: Date.parse('2026-10-05T05:40:00+09:00') }), null);
+});
+
+test('loadLatest: 点の観測がちょうど 3 時間前なら表示し、1 ms 超えたら隠す', async () => {
+  const url = 'https://www.jma.go.jp/bosai/amedas/data/point/14163/20261005_00.json';
+  const json = JSON.stringify({ '20261005000000': { temp: [3.1, 0], wind: [1, 0], windDirection: [8, 0] } });
+  const f = fakeFetch({ [LATEST_TIME_URL]: '2026-10-05T00:00:00+09:00', [url]: json });
+  const edge = Date.parse('2026-10-05T03:00:00+09:00');
+  assert.equal((await loadLatest(f, { nowMs: edge }))?.temperature, 3.1);
+  assert.equal(await loadLatest(f, { nowMs: edge + 1 }), null);
 });
