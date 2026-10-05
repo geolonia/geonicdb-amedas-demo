@@ -52,16 +52,25 @@ export function parsePayload(payload) {
 
 // Date.parse は寛容すぎる("2025" や "5" を日付にし、ゾーンなしは端末のローカル時刻で読む)ので、
 // ゾーンつきの ISO 8601 の日時だけを受け、2000〜2100年の範囲に限る。
-const ISO_WITH_ZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+const ISO_WITH_ZONE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d{1,9})?(Z|[+-](\d{2}):(\d{2}))$/;
 const MIN_MS = Date.UTC(2000, 0, 1);
 const MAX_MS = Date.UTC(2101, 0, 1) - 1;
+
+// 年月日の実在(月末、閏年)と、時分秒・ゾーンの範囲を確かめる(Date.parse は 2月30日を 3月2日にする)。24:00 と 60 秒は受けない。
+function isValidParts(m) {
+  const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number);
+  const daysInMonth = new Date(Date.UTC(y, mo, 0)).getUTCDate(); // mo が 0 や 13 以上でも例外にならない(下で範囲を見る)
+  const zoneOk = m[9] === undefined || (Number(m[9]) <= 23 && Number(m[10]) <= 59);
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= daysInMonth && h <= 23 && mi <= 59 && s <= 59 && zoneOk;
+}
 
 // DateTime の Property の値をミリ秒にする。
 // 通知では {"type":"DateTime","@value":"…"}(書き込みの "@type" が "type" に置き換わる)。文字列の値も読む。
 export function readDateTime(prop) {
   const v = prop?.value;
   const s = typeof v === 'string' ? v : v?.['@value'];
-  if (typeof s !== 'string' || !ISO_WITH_ZONE.test(s)) return null;
+  const m = typeof s === 'string' ? ISO_WITH_ZONE.exec(s) : null;
+  if (!m || !isValidParts(m)) return null;
   const ms = Date.parse(s);
   return Number.isFinite(ms) && ms >= MIN_MS && ms <= MAX_MS ? ms : null;
 }

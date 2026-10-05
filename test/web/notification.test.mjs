@@ -175,3 +175,17 @@ test('1通あたり最大 50 件まで処理する', () => {
   assert.equal(MAX_ENTITIES_PER_MESSAGE, 50);
   assert.equal(normalizeMessage('amedas/live', JSON.stringify({ data: list }), 0).length, 50);
 });
+
+test('readDateTime: 存在しない日付(月末、閏年)と範囲外の時分秒は null、24:00 は受けない', () => {
+  const ok = (v) => readDateTime({ value: v });
+  for (const bad of ['2025-02-30T03:00:00Z', '2025-02-29T03:00:00Z', '2025-04-31T00:00:00Z', '2026-06-31T00:00:00Z',
+    '2100-02-29T00:00:00Z', '2025-11-18T24:00:00Z', '2025-11-18T23:60:00Z', '2025-11-18T23:00:60Z', '2025-00-10T00:00:00Z',
+    '2025-01-00T00:00:00Z', '2025-11-18T03:00:00+24:00', '2025-11-18T03:00:00+09:60']) {
+    assert.equal(ok(bad), null, bad);
+  }
+  assert.equal(ok('2024-02-29T03:00:00Z'), Date.UTC(2024, 1, 29, 3)); // 閏年
+  assert.equal(ok('2000-02-29T00:00:00Z'), Date.UTC(2000, 1, 29)); // 400 で割れる年は閏年
+  assert.equal(ok('2025-02-28T23:59:59Z'), Date.UTC(2025, 1, 28, 23, 59, 59));
+  assert.equal(ok('2025-04-30T00:00:00Z'), Date.UTC(2025, 3, 30));
+  assert.equal(ok('2025-12-31T23:59:59Z'), Date.UTC(2025, 11, 31, 23, 59, 59));
+});
