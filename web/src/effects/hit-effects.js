@@ -54,7 +54,7 @@ export function installHitEffects(app) {
     const name = app.wardNames.get(hit.ward) ?? hit.ward;
     const p = app.positions.get(hit.ward);
     if (p) ripples.hit(hit.key, p.x, p.y, hit.tier, `${name} 1時間降雪量 ${hit.value}cm`, hit.ward);
-    app.mapLayer.flashHit(hit.ward, hit.tier);
+    app.mapLayer.flashHit(hit.ward, hit.tier, obs?.receivedAt);
     hitList.render(hit, name, obs);
   });
 }

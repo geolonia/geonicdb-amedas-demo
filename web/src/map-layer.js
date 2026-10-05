@@ -4,13 +4,13 @@ import { Map as MapLibreMap, setWorkerUrl } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { snowColorExpression } from './lib/color.js';
+import { hitFlashRemaining, mergePendingHit } from './lib/hit-flash.js';
 
 // バンドルした Worker を使う(既定では、maplibre-gl.mjs の隣のファイルを探して失敗する)
 setWorkerUrl(workerUrl);
 
 const BACKGROUND = '#070d18';
 const HIT_LEVEL = Object.freeze({ ge3: 1, ge5: 2 });
-const HIT_FLASH_MS = 1800;
 
 function stationBounds(stations) {
   const lngs = stations.map((s) => s.coordinates[0]);
@@ -39,6 +39,7 @@ export function createMapLayer({ container, wards, stations, padding }) {
 
   let loaded = false;
   const pendingSnow = new Map();
+  const pendingHits = new Map(); // ロード前に届いたヒット(区 -> { tier, startedAt })
   const hitTimers = new Map();
 
   const ready = new Promise((resolve) => {
@@ -71,6 +72,8 @@ export function createMapLayer({ container, wards, stations, padding }) {
       loaded = true;
       for (const [ward, cm] of pendingSnow) setSnow(ward, cm);
       pendingSnow.clear();
+      for (const [ward, h] of pendingHits) flashHit(ward, h.tier, h.startedAt); // 残りの時間だけ強調する(期限切れは出さない)
+      pendingHits.clear();
       resolve();
     });
   });
@@ -86,12 +89,18 @@ export function createMapLayer({ container, wards, stations, padding }) {
     map.setFeatureState({ source: 'stations', id: ward }, { snow });
   }
 
-  // 条件ヒットの区の外周を、しばらく強調する(強い購読があとから届いたら、色を上書きする)
-  function flashHit(ward, tier) {
-    if (!loaded) return;
+  // 条件ヒットの区の外周を、しばらく強調する(強い購読があとから届いたら、色を上書きする)。
+  // startedAt: ヒットを受けた時刻。地図のロード前に届いたヒットは、ロード後に残りの時間だけ強調する。
+  function flashHit(ward, tier, startedAt = Date.now()) {
+    if (!loaded) {
+      pendingHits.set(ward, mergePendingHit(pendingHits.get(ward), { tier, startedAt }, HIT_LEVEL));
+      return;
+    }
+    const remaining = hitFlashRemaining(startedAt, Date.now());
+    if (remaining <= 0) return;
     clearTimeout(hitTimers.get(ward));
     map.setFeatureState({ source: 'wards', id: ward }, { hit: HIT_LEVEL[tier] ?? 0 });
-    hitTimers.set(ward, setTimeout(() => map.setFeatureState({ source: 'wards', id: ward }, { hit: 0 }), HIT_FLASH_MS));
+    hitTimers.set(ward, setTimeout(() => map.setFeatureState({ source: 'wards', id: ward }, { hit: 0 }), remaining));
   }
 
   function refit() {
