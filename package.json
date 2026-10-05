@@ -6,7 +6,7 @@
   "description": "札幌市10区の積雪を、NGSI-LD ブローカーの購読通知でタイムラプス表示するデモ",
   "type": "module",
   "engines": {
-    "node": ">=22.13"
+    "node": "^22.13.0 || >=24"
   },
   "scripts": {
     "test": "node --test \"test/**/*.test.mjs\"",
