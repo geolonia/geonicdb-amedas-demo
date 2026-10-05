@@ -5,15 +5,27 @@
   "license": "MIT",
   "description": "札幌市10区の積雪を、NGSI-LD ブローカーの購読通知でタイムラプス表示するデモ",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": "^22.13.0 || >=24"
+  },
   "scripts": {
     "test": "node --test \"test/**/*.test.mjs\"",
+    "lint": "eslint .",
     "build:data": "node scripts/prepare/build.mjs",
     "setup": "node scripts/replayer/setup.mjs",
     "replay": "node scripts/replayer/replay.mjs",
-    "smoke": "node scripts/smoke/smoke.mjs"
+    "smoke": "node scripts/smoke/smoke.mjs",
+    "fake-notify": "node scripts/fake-notify/fake-notify.mjs",
+    "web:dev": "vite --config web/vite.config.js",
+    "web:build": "vite build --config web/vite.config.js",
+    "web:preview": "vite preview --config web/vite.config.js"
   },
   "devDependencies": {
-    "mqtt": "^5.16.0"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "maplibre-gl": "^6.12.0",
+    "mqtt": "^5.16.0",
+    "vite": "^8.3.2"
   }
 }

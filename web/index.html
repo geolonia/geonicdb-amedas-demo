@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>札幌市10区 積雪タイムラプス(NGSI-LD 購読通知のライブ配信)</title>
+  </head>
+  <body>
+    <div id="fatal" role="alert" hidden></div>
+    <div id="map"></div>
+    <div id="fx" aria-hidden="true"></div>
+
+    <header id="title" class="panel">
+      <h1>札幌市10区の積雪 <small>2025年11月の観測値を、いま配信しています</small></h1>
+    </header>
+
+    <section id="clocks" class="panel" aria-label="時計">
+      <div class="clock">
+        <div class="clock-label">観測時刻</div>
+        <div class="clock-value observed" data-clock="observed">—</div>
+      </div>
+      <div class="clock">
+        <div class="clock-label">現在時刻</div>
+        <div class="clock-value wall" data-clock="wall">—</div>
+      </div>
+    </section>
+
+    <section id="hud" class="panel" aria-label="配信の状況" data-status="connecting">
+      <div class="hud-row"><span><i class="dot"></i>NGSI-LD 通知(MQTT)</span><b data-hud="total">0</b></div>
+      <div class="hud-row"><span>通知レート</span><span><b data-hud="rate">0</b> <small>件/分</small></span></div>
+      <div class="hud-row"><span>配信の遅延(書き込み→受信)</span><span><b data-hud="latency">—</b> <small>ms</small></span></div>
+      <div class="hud-row sub"><span>中央値 / p95 / 最大</span><small data-hud="latency-stats">— / — / —</small></div>
+      <div class="hud-row hit"><span>条件付き購読の通知</span><small>5cm 以上 <b data-hud="ge5">0</b> ・ 3cm 以上 <b data-hud="ge3">0</b></small></div>
+    </section>
+
+    <aside id="side" class="panel" aria-label="通知">
+      <h2>条件付き購読の通知(1時間降雪量)</h2>
+      <ol id="hits"></ol>
+    </aside>
+
+    <section id="legend" class="panel" aria-label="凡例">
+      <span>積雪深 0cm</span><i class="legend-bar"></i><span>35cm</span>
+    </section>
+
+    <footer id="attribution">
+      観測値: 札幌市「札幌市内の気象観測記録(区別・年次別)」(CC BY 4.0)を加工して作成 ・
+      区の境界: 「国土数値情報(行政区域データ)」(国土交通省)を加工して作成 ・
+      観測地点の座標: 国土地理院ウェブサイトの住所検索の結果を加工して作成
+    </footer>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

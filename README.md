@@ -4,14 +4,18 @@
 購読通知(MQTT)で地図に届けるデモです。FOSS4G Hokkaido 2026(2026-11-28)の発表のために作っています。
 
 設計は [docs/superpowers/specs/2026-10-04-sapporo-snow-timelapse-design.md](docs/superpowers/specs/2026-10-04-sapporo-snow-timelapse-design.md)
-を参照してください。地図アプリは作業中です。
+を参照してください。
 
 ## 動かし方(OSS のブローカー Stellio で再現する)
 
-必要なもの: Docker、Node.js 22 以上、メモリに約 2GB の余裕。
+必要なもの: Docker、Node.js 22.13 以上の 22 系、または 24 以上(23 系は対象外)、メモリに約 2GB の余裕。
 
 ```bash
 npm ci
+
+# 先に地図アプリを開く(「地図アプリ」の節。replay は前面で約13分動くため、終わる前に開いておく)
+npm run web:build
+npm run web:preview   # 別の端末で実行し、ブラウザーで http://127.0.0.1:4173/ を開く
 
 docker compose -f compose/docker-compose.yml up -d
 # 数十秒待ってから、終了したサービスがないかを見る。Exited のものがあれば、もう一度 up -d を実行する
@@ -38,6 +42,46 @@ PostgreSQL が接続を受け付ける前に、データベースの移行(Flywa
 
 通知は、MQTT のトピック `amedas/live`、`amedas/cond/snowfall1h_ge5`、`amedas/cond/snowfall1h_ge3` に届きます
 (`ws://127.0.0.1:9001` から、MQTT の WebSocket で購読できます)。
+
+### 地図アプリ
+
+通知を地図に表示する Web アプリです(`web/`。Vite と MapLibre GL JS、mqtt.js)。地図のタイルは使いません。ブローカーへの接続(MQTT の WebSocket)のほかに外部へ通信するのは、当日の最新値(気象庁)の取得だけです。画面は 1280×720 以上を想定しています。
+
+```bash
+npm run web:build      # dist/web/ にビルドする
+npm run web:preview    # http://127.0.0.1:4173/ で配信する(127.0.0.1 だけで待ち受けます)
+```
+
+ブラウザーで http://127.0.0.1:4173/ を開いてから、`npm run setup` と `npm run replay` を実行します。
+開発中は `npm run web:dev`(http://127.0.0.1:5173/)を使います。
+
+| URL パラメーター | 既定値 | 内容 |
+|---|---|---|
+| `mqtt` | `ws://127.0.0.1:9001` | MQTT の WebSocket の URL(例: `?mqtt=ws://127.0.0.1:9001`)。`ws://` か `wss://` の URL でないときは、コンソールに警告を出して既定値を使います(値が空の `?mqtt=` は、警告なしで既定値を使います) |
+| `debug` | なし | 受信した通知を記録する(`window.__sapporo.received`)。これを JSON で保存し、`node scripts/smoke/compare-browser.mjs <replay の --log のファイル> <保存した受信ログ>` で、replay が送った書き込みと突き合わせられます(欠落か重複があれば、終了コードは 1) |
+| `live` | なし | `?live=off` で、当日の最新値(気象庁)を取りに行かない |
+
+画面の見方:
+
+- 観測時刻: いま届いた通知の観測時刻(`dateObserved`)。2025年11月の時刻が進みます。現在時刻は、この PC の時計です。
+- 配信の遅延: 通知を受けた時刻 − 書き込んだ時刻(`sentAt`)。ブローカーと地図アプリが同じ PC で動いていることが前提です。`npm run smoke` と同じ定義ですが、地図アプリは直近の 2000 件だけを残し、負の値(時計のずれ)は数えません。重複した通知は、そのまま数えます。`smoke` は、実行全体を(ID、`sentAt`)の組ごとに集計します。
+- 条件付き購読の通知: 1時間降雪量が 3cm 以上(橙)、5cm 以上(赤)の区。同じ書き込みの2つの購読の通知は、強い方の1件にまとめます。`dateObserved` のない通知でも、`snowfall1h` に `observedAt` があれば、ヒットとして表示します(正時の書き込みかどうかは確かめません)。
+- 区の色: 積雪深(0、5、15、25、35cm の刻み)。通知をまだ受けていない区は暗い灰色です。気温は、その区にまだ気温の値がないとき、または値の観測時刻が、通知の観測時刻(`dateObserved`)より 1 時間以上古いときは「—」と表示します(欠測が続くと、最後の値が 1 時間前になった時点で「—」になります)。1ステップだけ欠測の通知では、前の値のままです(書き込みは欠測の属性を書かないため)。
+- 当日の最新値: 気象庁のアメダス(札幌)の気温と風を、出典つきで右の欄の下に表示します。10分ごとに取り直します。取れないとき、観測時刻が3時間より古いとき、または10分より先の未来のときは、出典も含めて何も表示しません。
+- 雪の粒: 区ごとに、降雪量(と積雪深の増分)に連動して粒が降ります。気温が 3℃ を超える区では降りません。
+- 円表示: 「表示: 面(区)」のボタンで、区の面の塗り分けと、観測点の円を切り替えます(押すたびに、ボタンの文言が「表示: 円(観測点)」と入れ替わります)。既定は面です。
+- 音: 「音を有効化(クリックが必要)」のボタンを押すと、条件ヒットでチャイムが鳴ります。ブラウザーは操作なしに音を出せないため、発表の最初に1回押してください。ページを読み直したら、もう一度押します。既定はオフです。
+- 切り替え: 画面の「切り替え」で、時計、HUD、波紋、通知ログ、雪の粒を、それぞれ表示するかどうかを変えられます。同じ欄に、円表示と音のボタンもあります。
+
+ブローカーなしで画面だけを確かめるときは、Mosquitto だけを起動して、通知と同じ形のメッセージを流せます(配信の遅延の測定には使えません)。
+
+```bash
+docker compose -f compose/docker-compose.yml up -d mosquitto
+npm run fake-notify -- --from 2025-11-18T13:50:00+09:00 --to 2025-11-18T15:10:00+09:00 --interval 1500
+npm run fake-notify -- --bare --order weak-first    # 封筒のない形、弱い購読が先に届く場合
+```
+
+画面の確認で撮ったスクリーンショットは、リポジトリに入れないでください(公開リポジトリのため)。
 
 ### 再生の速度
 
@@ -73,10 +117,10 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 
 - 別のブローカーだけを使うときは、`docker compose -f compose/docker-compose.yml up -d mosquitto context` で、MQTT と `@context` の配信だけを起動できます。
   その場合、`CONTEXT` は、`http://127.0.0.1:8081/weather.jsonld` のように、そのブローカーから見える URL にします。
-- ホスト(compose の外)で動くブローカーでは、既定値の `mqtt://mosquitto:1883` や `http://context/weather.jsonld` は、そのブローカーから届きません。例えば、ポート 3120 で動くブローカーなら、次のようにします(Mosquitto と context は、上の compose で起動します)。
+- ホスト(compose の外)で動くブローカーでは、既定値の `mqtt://mosquitto:1883` や `http://context/weather.jsonld` は、そのブローカーから届きません。例えば、ポート 4000 で動くブローカーなら、次のようにします(Mosquitto と context は、上の compose で起動します)。
 
   ```bash
-  BROKER_URL=http://localhost:3120 MQTT_URI_BASE=mqtt://localhost:1883 \
+  BROKER_URL=http://localhost:4000 MQTT_URI_BASE=mqtt://localhost:1883 \
   CONTEXT=https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld TENANT=demo \
   npm run smoke -- --interval 1000
   ```
@@ -131,6 +175,42 @@ npm run build:data    # 札幌市の CKAN と国土数値情報から data/ を�
   同じ機で、別の Stellio の compose を同時に動かすと衝突します。
 - Kafka のポートは `127.0.0.1:29092` に公開しています(Kafka が広告するアドレスと同じ番号です)。同じ番号を使う別の Kafka が手元で動いていると、起動に失敗します。その場合は、`compose/stellio/stellio.env` の `KAFKA_PORT` を変えてください(ホストの Kafka クライアントからは使えなくなりますが、Stellio の動作には影響しません)。
 - `compose/stellio/` のファイルは、Stellio の Apache License 2.0 のファイルです([compose/NOTICE.md](compose/NOTICE.md))。
+
+## 仕組み
+
+```
+札幌市 CKAN(CSV、CC BY 4.0)
+   │ npm run build:data(作成済みのものを data/ にコミット済み)
+   ▼
+data/(区ごとの観測値、観測地点、区の境界)
+   │ npm run setup: 10区のエンティティを作り、購読を3本登録する
+   │ npm run replay: 時計に合わせて、1区ずつ順に書き込む(区の間も並列にしない)
+   ▼
+NGSI-LD ブローカー
+   │ 購読通知(MQTT、QoS 0)
+   ▼
+Mosquitto ── WebSocket(ws://127.0.0.1:9001)──► 地図アプリ(web/)
+```
+
+エンティティは区ごとに1件です(型 `WeatherObserved`、ID `urn:ngsi-ld:WeatherObserved:sapporo-<区>`)。
+
+| 属性 | 型 | 内容 |
+|---|---|---|
+| `temperature`、`snowHeight`、`precipitation`、`windSpeed`、`windDirection` | Property(`unitCode` と `observedAt` つき) | 10分ごとの観測値。欠測の行では書きません |
+| `snowfall1h` | Property(同上) | 前1時間の降雪量。正時の行にだけ書きます |
+| `dateObserved` | Property(DateTime) | その書き込みの観測時刻。書き込みのたびに付けます。地図アプリの「観測時刻」はこれです |
+| `sentAt` | Property(DateTime) | 書き込んだ時刻(ミリ秒まで)。書き込みのたびに付けます。地図アプリは、受信時刻との差を配信の遅延として表示します |
+| `name`、`location` | Property、GeoProperty | 区名と、観測地点(各区の土木センター)の座標 |
+
+購読は3本です(対象は ID が `urn:ngsi-ld:WeatherObserved:sapporo-` で始まるエンティティ)。
+
+| トピック | `q` | `watchedAttributes` | 届く通知 |
+|---|---|---|---|
+| `amedas/live` | なし | `["sentAt"]` | 書き込みごとに1件(エンティティの全属性) |
+| `amedas/cond/snowfall1h_ge5` | `snowfall1h>=5` | `["snowfall1h"]` | 正時に、降雪量が 5cm 以上だった区 |
+| `amedas/cond/snowfall1h_ge3` | `snowfall1h>=3` | `["snowfall1h"]` | 正時に、降雪量が 3cm 以上だった区 |
+
+条件付きの購読は、条件が成り立っている間、監視する属性が書かれるたびに通知されます。`snowfall1h` を正時にだけ書くことで、「その1時間に条件を満たした」通知になります。
 
 ## データの出典
 

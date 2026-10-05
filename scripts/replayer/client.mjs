@@ -33,7 +33,7 @@ export function createClient({ apiBase, tenant, context, fetchImpl = fetch, time
     // 購読の一覧の1ページ(offset から最大 limit 件)
     async listSubscriptions({ offset = 0, limit = PAGE } = {}) {
       const r = await request('GET', `/subscriptions?limit=${limit}&offset=${offset}`);
-      let json = null; // 読めなかったときは null(空配列と区別する)
+      let json; // 読めなかったときは null(空配列と区別する)
       try {
         json = JSON.parse(r.text || '[]');
       } catch {

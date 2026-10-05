@@ -1,0 +1,561 @@
+/* 地図アプリの画面。外部のフォントや画像は使わない(オフラインで動かすため)。 */
+:root {
+  --bg: #070d18;
+  --panel: rgba(14, 22, 38, 0.86);
+  --line: #2a3a58;
+  --text: #e8f0fa;
+  --dim: #8ea3c4;
+  --accent: #7fd1ff;
+  --hit3: #ffb020;
+  --hit5: #ff3d7f;
+  --label-bg: rgba(7, 13, 24, 0.72); /* color.js の LABEL_BG と同じ値 */
+  /* ヒットのピルの背景と文字(color.js の HIT_PILL と同じ値。どの大きさでもコントラスト比 4.5 以上) */
+  --pill5-bg: #d81b60;
+  --pill5-text: #ffffff;
+  --pill3-bg: #ffb020;
+  --pill3-text: #1a0b12;
+  --ok: #35e08a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+}
+
+/* 区のラベル、波紋、ヒットのラベル(地図の上の DOM。クリックは地図に通す) */
+#fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 3;
+}
+
+.panel {
+  position: absolute;
+  z-index: 5;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+#title {
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 18px;
+}
+
+#title h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#title small {
+  margin-left: 10px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--dim);
+}
+
+#clocks {
+  top: 12px;
+  left: 12px;
+  min-width: 330px;
+}
+
+.clock + .clock {
+  margin-top: 6px;
+}
+
+.clock-label {
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+}
+
+.clock-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.clock-value.observed {
+  font-size: 28px;
+  color: var(--accent);
+}
+
+.clock-value.wall {
+  font-size: 20px;
+}
+
+#hud {
+  top: 150px;
+  left: 12px;
+  min-width: 330px;
+}
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 2px 0;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.hud-row b {
+  font-size: 20px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-row.sub {
+  padding-left: 1em;
+}
+
+.hud-row.hit b {
+  font-size: 15px;
+  color: var(--hit5);
+}
+
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #777;
+}
+
+#hud[data-status='connected'] .dot {
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+  animation: pulse 1.2s infinite;
+}
+
+/* 切れている、つなぎ直している、拒否された: 橙(会場で気付きやすくする) */
+#hud[data-status='reconnecting'] .dot,
+#hud[data-status='disconnected'] .dot,
+#hud[data-status='error'] .dot,
+#hud[data-status='refused'] .dot {
+  background: var(--hit3);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+#side {
+  top: 12px;
+  right: 12px;
+  bottom: 40px;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+#side h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+
+#hits {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  min-height: 7em;
+}
+
+#hits li {
+  padding: 3px 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#hits li.ge3 {
+  color: var(--hit3);
+}
+
+#hits li.ge5 {
+  color: var(--hit5);
+}
+
+#hits li time {
+  margin-right: 8px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+#legend {
+  left: 12px;
+  bottom: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--dim);
+  padding: 6px 12px;
+}
+
+.legend-bar {
+  display: inline-block;
+  width: 160px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* 出典(CC BY 4.0 の表示)は、演出の切り替えに関係なく常に表示する */
+#attribution {
+  position: absolute;
+  left: 12px;
+  bottom: 8px;
+  z-index: 6;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  box-sizing: border-box;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  /* 区の面(0〜80cm、欠測)の上でもコントラスト比 4.5 以上にするため、パネルの背景を付ける(test/web/color.test.mjs が確かめる) */
+  color: #a9b8d0;
+  background: var(--panel);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 区のラベル。明るい区の上でも読めるよう、暗い半透明の背景を付ける(設計書 5.3) */
+.ward-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--label-bg);
+  text-align: center;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.ward-label b {
+  display: block;
+  font-size: 13px;
+}
+
+.ward-label .snow {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  margin-right: 6px;
+}
+
+.ward-label .temp {
+  font-variant-numeric: tabular-nums;
+}
+
+.ward-label .t-cold {
+  color: #9fd4ff;
+}
+
+.ward-label .t-near {
+  color: #e8f0fa;
+}
+
+.ward-label .t-warm {
+  color: #ffc58a;
+}
+
+.ward-label .t-none {
+  color: var(--dim);
+}
+
+#fatal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 10px 16px;
+  background: #7a1230;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+}
+
+#fatal[hidden] {
+  display: none;
+}
+
+/* ---- 波紋と条件ヒット(Task 11) ---- */
+.ring {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  margin: -40px 0 0 -40px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(160, 215, 255, 0.55);
+  opacity: 0;
+  transform: scale(0.1);
+  animation: ring-live 1.3s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes ring-live {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.ring.ring-hit {
+  width: 300px;
+  height: 300px;
+  margin: -150px 0 0 -150px;
+  border-width: 4px;
+  animation: ring-hit 2.2s cubic-bezier(0.15, 0.6, 0.3, 1) forwards;
+}
+
+.ring.ring-hit.ge3 {
+  border-color: var(--hit3);
+  box-shadow: 0 0 22px var(--hit3), inset 0 0 22px var(--hit3);
+}
+
+.ring.ring-hit.ge5 {
+  border-color: var(--hit5);
+  box-shadow: 0 0 26px var(--hit5), inset 0 0 26px var(--hit5);
+}
+
+.ring.ring-hit.delayed {
+  animation-delay: 0.35s;
+}
+
+@keyframes ring-hit {
+  0% {
+    opacity: 0.95;
+    transform: scale(0.08);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* 置き場所(left, top)は hit-effects.js が決める(区のラベルとパネルを避ける。lib/hit-placement.js)。
+   動く範囲は、置いた位置から上へ 12px、下へ 6px(lib/hit-placement.js の HIT_DRIFT と対) */
+.hit-label {
+  position: absolute;
+  z-index: 2;
+  white-space: nowrap;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 5px 14px;
+  border-radius: 999px;
+  color: var(--pill3-text);
+  background: var(--pill3-bg);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  animation: hit-label 4s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+.hit-label.ge5 {
+  color: var(--pill5-text);
+  background: var(--pill5-bg);
+}
+
+@keyframes hit-label {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.6);
+  }
+  8% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+/* ---- 切り替えと通知ログ(Task 12) ---- */
+[hidden] {
+  display: none !important;
+}
+
+#controls {
+  left: 12px;
+  bottom: 84px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dim);
+  padding: 8px 12px;
+}
+
+#controls label {
+  margin-right: 10px;
+  white-space: nowrap;
+}
+
+#controls button {
+  margin-right: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: #16233a;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#log {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+
+#log li {
+  padding: 2px 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  animation: row-in 0.35s ease-out;
+}
+
+#log li time {
+  margin-right: 6px;
+  color: var(--dim);
+}
+
+#log li .ward {
+  display: inline-block;
+  width: 4em;
+  color: var(--accent);
+}
+
+#log li.ge3 {
+  color: var(--hit3);
+}
+
+#log li.ge5 {
+  color: var(--hit5);
+}
+
+@keyframes row-in {
+  from {
+    background: rgba(127, 209, 255, 0.25);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+/* ---- 1280 × 720 まで(Task 13) ---- */
+/* 会場の解像度の下限は 1280 × 720。パネルを細くして、地図の幅を確保する。
+   境目は 1600px(1440 × 900、1536 × 864 のプロジェクターでも、1400px を超えると地図が狭いまま
+   右の欄とピルが元の大きさに戻り、ピルがラベルや右の欄に重なった) */
+@media (max-width: 1600px) {
+  #side {
+    width: 320px;
+  }
+
+  /* ヒット欄の最長の行(例: 「…観測 15:00 厚別区 4cm/h(3cm 以上)」)が、末尾まで1行に収まるようにする */
+  #hits li {
+    font-size: 12px;
+  }
+
+  #hits li time {
+    margin-right: 6px;
+    font-size: 11px;
+  }
+
+  #clocks,
+  #hud {
+    min-width: 260px;
+  }
+
+  .clock-value.observed {
+    font-size: 22px;
+  }
+
+  .ward-label {
+    font-size: 11px;
+  }
+
+  /* ヒットのラベルを小さくして、狭い地図の中で、区のラベルとパネルを避けて置ける場所を増やす */
+  .hit-label {
+    font-size: 16px;
+    padding: 4px 12px;
+  }
+}
+
+/* ---- 当日の最新値(Task 14) ---- */
+#live-widget {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+#live-widget .live-value {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+#live-widget .live-meta,
+#live-widget .live-source {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* ---- 雪の粒(Task 16) ---- */
+#snow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
