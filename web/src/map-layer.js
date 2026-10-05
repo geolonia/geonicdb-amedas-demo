@@ -4,7 +4,7 @@ import { Map as MapLibreMap, setWorkerUrl } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { snowColorExpression } from './lib/color.js';
-import { hitFlashRemaining, mergePendingHit } from './lib/hit-flash.js';
+import { hitFlashRemaining, addPendingHit, pickPendingHit } from './lib/hit-flash.js';
 
 // バンドルした Worker を使う(既定では、maplibre-gl.mjs の隣のファイルを探して失敗する)
 setWorkerUrl(workerUrl);
@@ -39,7 +39,7 @@ export function createMapLayer({ container, wards, stations, padding }) {
 
   let loaded = false;
   const pendingSnow = new Map();
-  const pendingHits = new Map(); // ロード前に届いたヒット(区 -> { tier, startedAt })
+  const pendingHits = new Map(); // ロード前に届いたヒット(区 -> { tier: 最新の startedAt })
   const hitTimers = new Map();
 
   const ready = new Promise((resolve) => {
@@ -72,7 +72,10 @@ export function createMapLayer({ container, wards, stations, padding }) {
       loaded = true;
       for (const [ward, cm] of pendingSnow) setSnow(ward, cm);
       pendingSnow.clear();
-      for (const [ward, h] of pendingHits) flashHit(ward, h.tier, h.startedAt); // 残りの時間だけ強調する(期限切れは出さない)
+      for (const [ward, candidates] of pendingHits) {
+        const h = pickPendingHit(candidates, Date.now(), HIT_LEVEL); // 期限が残っている中で最も強い tier を、残りの時間だけ強調する
+        if (h) flashHit(ward, h.tier, h.startedAt);
+      }
       pendingHits.clear();
       resolve();
     });
@@ -93,7 +96,7 @@ export function createMapLayer({ container, wards, stations, padding }) {
   // startedAt: ヒットを受けた時刻。地図のロード前に届いたヒットは、ロード後に残りの時間だけ強調する。
   function flashHit(ward, tier, startedAt = Date.now()) {
     if (!loaded) {
-      pendingHits.set(ward, mergePendingHit(pendingHits.get(ward), { tier, startedAt }, HIT_LEVEL));
+      pendingHits.set(ward, addPendingHit(pendingHits.get(ward), tier, startedAt));
       return;
     }
     const remaining = hitFlashRemaining(startedAt, Date.now());
