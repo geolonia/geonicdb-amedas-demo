@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createStats, percentile } from '../../web/src/lib/stats.js';
 import { percentile as smokePercentile } from '../../scripts/smoke/analyze.mjs';
+import { formatMs, MISSING } from '../../web/src/lib/format.js';
 import { observation } from './helpers.mjs';
 
 const T0 = Date.parse('2026-10-04T09:00:00Z');
@@ -117,4 +118,23 @@ test('受信時刻と同時刻(遅延 0)は標本に入る', () => {
   assert.equal(latency.count, 1);
   assert.equal(latency.last, 0);
   assert.equal(latency.median, 0);
+});
+
+test('計測できない通知(sentAt なし、負の遅延)のあとは、latency.last を null にする(HUD は「—」)。中央値・p95 は保持する', () => {
+  const st = createStats();
+  st.recordLive(liveAt(T0, 400));
+  assert.equal(st.snapshot(T0 + 1).latency.last, 400);
+  st.recordLive(liveAt(T0 + 10, null));
+  let l = st.snapshot(T0 + 20).latency;
+  assert.equal(l.last, null);
+  assert.equal(l.count, 1);
+  assert.equal(l.median, 400);
+  assert.equal(l.p95, 400);
+  st.recordLive(liveAt(T0 + 30, 250));
+  assert.equal(st.snapshot(T0 + 40).latency.last, 250);
+  st.recordLive(liveAt(T0 + 50, -5)); // sentAt が受信より先(時計のずれ)も計測できない
+  l = st.snapshot(T0 + 60).latency;
+  assert.equal(l.last, null);
+  assert.equal(l.count, 2);
+  assert.equal(formatMs(l.last), MISSING); // HUD は formatMs(snap.latency.last) で表示する
 });

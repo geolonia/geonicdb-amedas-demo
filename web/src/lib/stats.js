@@ -32,6 +32,7 @@ export function createStats({ windowMs = 60_000, maxLatencySamples = 2000 } = {}
       }
       lastReceivedAt = r;
       times.push(r);
+      lastLatency = null; // 通知ごとに、最新の遅延をいったん「計測なし」にする(過去の標本の値を残さない)
       if (obs.sentAt !== null) {
         const l = r - obs.sentAt;
         if (Number.isFinite(l) && l >= 0) {
