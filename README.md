@@ -132,6 +132,7 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 |---|---|---|---|
 | `BROKER_URL` | `--broker-url` | `http://localhost:8080` | ブローカーの URL(`/ngsi-ld/v1` の手前まで) |
 | `TENANT` | `--tenant` | なし | `NGSILD-Tenant` ヘッダーの値。使える文字はブローカーによって制限される(英小文字、数字、`_` なら通りやすい。ハイフンや大文字は 400 になるものがある) |
+| `BROKER_TOKEN` | なし | なし | 認証を求めるブローカーで使うトークン。`Authorization: Bearer <トークン>` のヘッダーで送る。シェルの履歴に残らないよう、引数では指定できない(環境変数で渡す)。前後の空白は除き、空白や改行、ASCII 以外の文字を含むときはエラーにする。`BROKER_URL` は HTTPS か、自分の PC(`localhost` など)への HTTP に限る |
 | `CONTEXT` | `--context` | `http://context/weather.jsonld` | `@context` の URL(ブローカーから見える URL) |
 | `MQTT_URI_BASE` | `--mqtt-base` | `mqtt://mosquitto:1883` | ブローカーから見た MQTT の宛先 |
 | `MQTT_VERSION` | `--mqtt-version` | `mqtt5.0` | 購読の `notifierInfo` に書く MQTT のバージョン |
@@ -151,7 +152,7 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 
 環境変数だけで切り替えられるのは、次をすべて満たすブローカーです。
 
-- 認証が要らない(認証のヘッダーを付ける設定はありません)。
+- 認証が要らない、または NGSI-LD の HTTP API の認証を `BROKER_TOKEN`(Bearer トークン)で通せる。`smoke` が起動する `setup` と `replay` にも使われます。MQTT の接続の認証には使いません。
 - `@context` を URL の形で受け付ける。
 - 標準の MQTT の通知を送る。
 

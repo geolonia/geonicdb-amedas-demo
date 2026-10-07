@@ -47,3 +47,26 @@ test('不正な値は、分かりやすいエラーにする', () => {
   assert.throws(() => parseConfig(['--from', '2025-11-19T00:00:00+09:00', '--to', '2025-11-18T00:00:00+09:00'], {}), /--to.*--from/);
   assert.throws(() => parseConfig(['--unknown'], {}));
 });
+
+test('認証のトークンは環境変数 BROKER_TOKEN からだけ読む(引数ではシェルの履歴に残るため、受け付けない)', () => {
+  assert.equal(parseConfig([], {}).token, undefined);
+  assert.equal(parseConfig([], { BROKER_TOKEN: '' }).token, undefined);
+  assert.equal(parseConfig([], { BROKER_TOKEN: 'abc' }).token, 'abc');
+  assert.throws(() => parseConfig(['--token', 'abc'], {}), /token/);
+});
+
+test('BROKER_TOKEN の前後の空白は除き、ヘッダーに使えない文字があれば、値を表示せずにエラーにする', () => {
+  assert.equal(parseConfig([], { BROKER_TOKEN: ' abc\n' }).token, 'abc');
+  assert.equal(parseConfig([], { BROKER_TOKEN: '  ' }).token, undefined);
+  assert.throws(() => parseConfig([], { BROKER_TOKEN: 'a\nsecret' }), (e) => /BROKER_TOKEN/.test(e.message) && !e.message.includes('secret'));
+  assert.throws(() => parseConfig([], { BROKER_TOKEN: 'aあsecret' }), (e) => /BROKER_TOKEN/.test(e.message) && !e.message.includes('secret'));
+});
+
+test('BROKER_TOKEN を使うときは、BROKER_URL が HTTPS か、自分の PC(loopback)への HTTP でなければエラーにする', () => {
+  const tok = { BROKER_TOKEN: 'abc' };
+  assert.equal(parseConfig([], { ...tok, BROKER_URL: 'https://broker.example' }).token, 'abc');
+  for (const u of ['http://localhost:4000', 'http://127.0.0.1:4000', 'http://[::1]:4000']) assert.equal(parseConfig([], { ...tok, BROKER_URL: u }).token, 'abc');
+  assert.throws(() => parseConfig([], { ...tok, BROKER_URL: 'http://broker.example' }), /BROKER_TOKEN.*HTTPS/);
+  assert.throws(() => parseConfig(['--broker-url', 'http://10.0.0.5:8080'], tok), /BROKER_TOKEN.*HTTPS/);
+  assert.equal(parseConfig([], { BROKER_URL: 'http://broker.example' }).token, undefined);
+});
