@@ -129,3 +129,12 @@ test('listAllSubscriptions: ページが終わらなければ、上限で止め�
   await assert.rejects(createClient({ ...base, fetchImpl }).listAllSubscriptions(), /ページ/);
   assert.equal(n, 100);
 });
+
+test('トークンを指定したときだけ Authorization: Bearer ヘッダーを付ける', async () => {
+  const a = fake();
+  await createClient({ ...base, token: 'abc', fetchImpl: a.fetchImpl }).patchAttrs('urn:a', {});
+  assert.equal(a.calls[0].headers.Authorization, 'Bearer abc');
+  const b = fake();
+  await createClient({ ...base, fetchImpl: b.fetchImpl }).patchAttrs('urn:a', {});
+  assert.equal(b.calls[0].headers.Authorization, undefined);
+});
