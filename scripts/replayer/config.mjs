@@ -54,6 +54,8 @@ export function parseConfig(argv, env = {}) {
   // ヘッダーに使えない文字があると、fetch のエラーにトークンがそのまま出るため、先に値を表示せずに止める。
   const token = env.BROKER_TOKEN?.trim() || undefined;
   if (token !== undefined && !/^[\x21-\x7E]+$/.test(token)) throw new Error('BROKER_TOKEN に、ヘッダーに使えない文字(空白、改行、ASCII 以外)が含まれています');
+  // 暗号化されない HTTP では、経路上でトークンを読まれる。HTTPS か、自分の PC(loopback)への HTTP だけを許す。
+  if (token !== undefined && !isHttpsOrLoopback(brokerUrl)) throw new Error('BROKER_TOKEN を使うときは、BROKER_URL を HTTPS か、自分の PC(localhost、127.0.0.1、[::1])への HTTP にしてください');
 
   return {
     brokerUrl,
@@ -71,4 +73,14 @@ export function parseConfig(argv, env = {}) {
     changedOnly: values['changed-only'] ?? false,
     requestTimeoutMs,
   };
+}
+
+function isHttpsOrLoopback(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  return u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname));
 }

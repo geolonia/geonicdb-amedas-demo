@@ -61,3 +61,12 @@ test('BROKER_TOKEN の前後の空白は除き、ヘッダーに使えない文�
   assert.throws(() => parseConfig([], { BROKER_TOKEN: 'a\nsecret' }), (e) => /BROKER_TOKEN/.test(e.message) && !e.message.includes('secret'));
   assert.throws(() => parseConfig([], { BROKER_TOKEN: 'aあsecret' }), (e) => /BROKER_TOKEN/.test(e.message) && !e.message.includes('secret'));
 });
+
+test('BROKER_TOKEN を使うときは、BROKER_URL が HTTPS か、自分の PC(loopback)への HTTP でなければエラーにする', () => {
+  const tok = { BROKER_TOKEN: 'abc' };
+  assert.equal(parseConfig([], { ...tok, BROKER_URL: 'https://broker.example' }).token, 'abc');
+  for (const u of ['http://localhost:4000', 'http://127.0.0.1:4000', 'http://[::1]:4000']) assert.equal(parseConfig([], { ...tok, BROKER_URL: u }).token, 'abc');
+  assert.throws(() => parseConfig([], { ...tok, BROKER_URL: 'http://broker.example' }), /BROKER_TOKEN.*HTTPS/);
+  assert.throws(() => parseConfig(['--broker-url', 'http://10.0.0.5:8080'], tok), /BROKER_TOKEN.*HTTPS/);
+  assert.equal(parseConfig([], { BROKER_URL: 'http://broker.example' }).token, undefined);
+});
