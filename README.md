@@ -132,7 +132,7 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 |---|---|---|---|
 | `BROKER_URL` | `--broker-url` | `http://localhost:8080` | ブローカーの URL(`/ngsi-ld/v1` の手前まで) |
 | `TENANT` | `--tenant` | なし | `NGSILD-Tenant` ヘッダーの値。使える文字はブローカーによって制限される(英小文字、数字、`_` なら通りやすい。ハイフンや大文字は 400 になるものがある) |
-| `BROKER_TOKEN` | なし | なし | 認証を求めるブローカーで使うトークン。`Authorization: Bearer <トークン>` のヘッダーで送る。シェルの履歴に残らないよう、引数では指定できない(環境変数で渡す) |
+| `BROKER_TOKEN` | なし | なし | 認証を求めるブローカーで使うトークン。`Authorization: Bearer <トークン>` のヘッダーで送る。シェルの履歴に残らないよう、引数では指定できない(環境変数で渡す)。前後の空白は除き、空白や改行、ASCII 以外の文字を含むときはエラーにする |
 | `CONTEXT` | `--context` | `http://context/weather.jsonld` | `@context` の URL(ブローカーから見える URL) |
 | `MQTT_URI_BASE` | `--mqtt-base` | `mqtt://mosquitto:1883` | ブローカーから見た MQTT の宛先 |
 | `MQTT_VERSION` | `--mqtt-version` | `mqtt5.0` | 購読の `notifierInfo` に書く MQTT のバージョン |
