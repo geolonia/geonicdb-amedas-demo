@@ -62,7 +62,10 @@ PostgreSQL が接続を受け付ける前に、データベースの移行(Flywa
 npm run smoke -- --from 2025-11-18T15:00:00+09:00 --to 2025-11-18T15:30:00+09:00
 ```
 
-止めるときは、端末 B で `docker compose -f compose/docker-compose.yml down -v` を実行し(`-v` で、Stellio のデータと、滞留した通知も消えます)、端末 A の `web:preview` を Ctrl-C で止めます。
+止めるときは、端末 B で次のどちらかを実行し、端末 A の `web:preview` を Ctrl-C で止めます。
+
+- データを消してもよいとき: `docker compose -f compose/docker-compose.yml down -v`(`-v` で、Stellio のデータと、滞留した通知も消えます)
+- データを残すとき: `docker compose -f compose/docker-compose.yml down`(`-v` を付けないので、Stellio のデータは残ります)
 
 ### 発表で見せた範囲だけを再生する
 
