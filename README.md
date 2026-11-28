@@ -8,35 +8,77 @@
 
 ## 動かし方(OSS のブローカー Stellio で再現する)
 
-必要なもの: Docker、Node.js 22.13 以上の 22 系、または 24 以上(23 系は対象外)、メモリに約 2GB の余裕。
+必要なもの:
+
+- Docker。compose ファイルが `include` を使うため、新しい版の Docker Compose が必要です(2026-11-28 に v5.7.1 で確認)。メモリに約 2GB の余裕
+- Node.js 22.13 以上の 22 系、または 24 以上(23 系は対象外)。`node -v` で確かめられます
+- 初回の起動と `setup` のときのネットワーク。Docker のイメージを取得するほか、Stellio が NGSI-LD のコア context(`https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld`)を外部から取りに行きます。このリポジトリが配信する `weather.jsonld` だけでは足りません。取れないときの症状は、次のとおりです。その場合は、TLS の検査がなく、外部に届くネットワークにつないで試してください
+  - 社内のプロキシなどで TLS を検査している(証明書が差し替わる)ネットワーク: 手順 4 の確認が 400(`LOADING_DOCUMENT_FAILED`)のまま変わらない(2026-11-28 に確認)
+  - ネットワークのない状態で新規に起動したとき: `setup` のエンティティ作成が 503(`LOADING_REMOTE_CONTEXT_FAILED`)で失敗する
+
+端末を 2 つ使います。端末 A で地図アプリを、端末 B で Stellio と再生を動かします。どちらの端末も、リポジトリのルート(clone したディレクトリ)で開きます。端末 A(`npm ci` を含む)を先に実行してください。
 
 ```bash
+# 端末 A: 地図アプリ(前面で動く。止めるときは Ctrl-C)
 npm ci
-
-# 先に地図アプリを開く(「地図アプリ」の節。replay は前面で約13分動くため、終わる前に開いておく)
 npm run web:build
-npm run web:preview   # 別の端末で実行し、ブラウザーで http://127.0.0.1:4173/ を開く
+npm run web:preview   # ブラウザーで http://127.0.0.1:4173/ を開く
+```
 
+```bash
+# 端末 B
+# 1. 前に動かした Stellio のデータが残っていれば消す(ボリューム名が固定のため。初めてなら何も起きない)
+#    同じ名前のボリュームを使う、別の Stellio のデータも消える。残したいデータがあるときは実行しない
+docker compose -f compose/docker-compose.yml down -v
+
+# 2. 起動する(イメージをまだ取得していないときは、取得のため、コマンドが戻るまで数分かかる)
 docker compose -f compose/docker-compose.yml up -d
-# 数十秒待ってから、終了したサービスがないかを見る。Exited のものがあれば、もう一度 up -d を実行する
+
+# 3. 1 分ほど待ってから、終了したサービスがないかを見る
+#    Exited のものがあれば、待っても直らないので、もう一度 up -d を実行する(下の説明を参照)
 docker compose -f compose/docker-compose.yml ps -a
-# 準備ができると 200 が返る
+
+# 4. 準備ができると 200 が返る(Exited が出て 2 回目の up -d をしたときは、そこから数秒〜10 秒ほど)
+#    500 や 400 が続くときは、3. に戻って Exited のサービスがないかを見る
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/ngsi-ld/v1/subscriptions
 
+# 5. 再生する(地図アプリを開いてから)
 npm run setup         # エンティティと購読を作る
 npm run replay        # 2025-11-18 の1日(128 ステップ)を、6,000ms/ステップ(約13分)で再生する
+```
 
-# 動作の確認: setup と replay を実行しながら通知を受信し、欠落、重複、遅延を表示する(引数は replay と同じ)
-# 欠落か重複(PATCH 1回につき amedas/live の通知は1回のはず)が1件でもあれば、終了コードは 1
+`replay` が最後に `完了: 128 ステップ、書き込み 1280 件、失敗 0 件` のように、失敗 0 件を表示すれば成功です。
+地図では、通知が届くたびに観測点に波紋が出て、区の色(積雪深)が変わります。
+
+Stellio は、初回の `up -d` で、`stellio-search-service` や `stellio-subscription-service` が終了することがあります。
+PostgreSQL が接続を受け付ける前に、データベースの移行(Flyway)が接続しようとして失敗するためです(ログに `Connection to postgres:5432 refused`)。
+`up -d` の直後は、すべてのコンテナが Up に見え、しばらくしてから終了するため、すぐに `ps` を見ても判断できません。
+終了したサービスは、待っても起動しません(2026-11-28 の確認では、5 分待っても手順 4 は 500 のままでした)。もう一度 `up -d` を実行すると起動します。
+
+動作を数字で確かめるときは、`smoke` を使います。`smoke` は、`setup` と `replay` を自分で実行しながら通知を受信し、欠落、重複、遅延を表示します(引数は `replay` と同じです。先に `setup` を実行する必要はありません)。
+欠落か重複(PATCH 1回につき `amedas/live` の通知は1回のはず)が1件でもあれば、終了コードは 1 です。
+
+```bash
 npm run smoke -- --from 2025-11-18T15:00:00+09:00 --to 2025-11-18T15:30:00+09:00
 ```
 
-Stellio は、初回の `up -d` で、`stellio-search-service` と `stellio-subscription-service` が終了することがあります。
-PostgreSQL が接続を受け付ける前に、データベースの移行(Flyway)が接続しようとして失敗するためです(ログに `Connection to postgres:5432 refused`)。
-`up -d` の直後は、すべてのコンテナが Up に見え、約 11 秒後に終了するため、すぐに `ps` を見ても判断できません。
-もう一度 `up -d` を実行すると起動します。
+止めるときは、端末 B で次のどちらかを実行し、端末 A の `web:preview` を Ctrl-C で止めます。
 
-止めるときは `docker compose -f compose/docker-compose.yml down -v` です(`-v` で、Stellio のデータと、滞留した通知も消えます)。
+- データを消してもよいとき: `docker compose -f compose/docker-compose.yml down -v`(`-v` で、Stellio のデータと、滞留した通知も消えます)
+- データを残すとき: `docker compose -f compose/docker-compose.yml down`(`-v` を付けないので、Stellio のデータは残ります)
+
+### 発表で見せた範囲だけを再生する
+
+FOSS4G Hokkaido 2026 の発表では、2025-11-18 の 12:40〜16:00(21 ステップ)を再生しました。Stellio では、10分を6秒(6,000ms)で再生すると約 2 分です(4,000ms では、Stellio は通知が滞留します。「再生の速度」の節を参照)。
+
+```bash
+npm run setup -- --from 2025-11-18T12:40:00+09:00
+npm run replay -- --from 2025-11-18T12:40:00+09:00 --to 2025-11-18T16:00:00+09:00 --interval 6000
+```
+
+`setup` と `replay` には、同じ `--from` を指定します。もう一度流すときは、ブラウザーを読み直してから、`setup` と `replay` をもう一度実行します。
+2026-11-28 に Stellio で `smoke` を同じ範囲で実行したときは、書き込み 210 件、欠落 0 件、重複 0 件、条件付き購読の通知は 5cm 以上 3 件・3cm 以上 11 件でした。
+`smoke` の成功の判定は、欠落 0 件・重複 0 件です。遅延は実行ごとにばらつきます。同じ日の別の実行では、遅延の p95 が 3.3 秒、最大が 57 秒の通知がありました(原因は調べていません。欠落と重複は 0 件でした)。
 
 観測データ(`data/`)は、作成済みのものがコミットされているため、作り直す必要はありません。
 
@@ -156,7 +198,7 @@ Docker に 8 CPU、約 7.75GB を割り当て、ほかのコンテナも動い�
 - `@context` を URL の形で受け付ける。
 - 標準の MQTT の通知を送る。
 
-「速度」の節の測定(128ステップ、約13分)と、この次の起動の注意は、Stellio の場合のものです。別のブローカーでは、`--interval` を `npm run smoke` で決めてください(通知が滞留しないブローカーでは、もっと短い間隔でも通ります)。ネットワークのない状態で新規に起動すると、Stellio が NGSI-LD のコア context(`https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.9.jsonld`)を外部から取得できず、`setup` のエンティティ作成が 503(`LOADING_REMOTE_CONTEXT_FAILED`)で失敗します。このリポジトリが配信する `weather.jsonld` だけでは足りません。初回の起動と `setup` は、ネットワークがある状態で行ってください。
+「速度」の節の測定(128ステップ、約13分)と、この次の起動の注意は、Stellio の場合のものです。別のブローカーでは、`--interval` を `npm run smoke` で決めてください(通知が滞留しないブローカーでは、もっと短い間隔でも通ります)。Stellio は、初回の起動と `setup` でネットワークが必要です(「動かし方」の「必要なもの」を参照)。
 
 ### データを作り直したいとき
 
@@ -174,7 +216,8 @@ npm run build:data    # 札幌市の CKAN と国土数値情報から data/ を�
   Stellio(`http://127.0.0.1:8080`)は認証なしで接続できるため、ブラウザーで開いた任意の Web ページからも接続できます。
 - Stellio の compose(upstream のもの)は、コンテナ名(`stellio-*`)とボリューム名(`stellio-postgres-storage`)が固定です。
   同じ機で、別の Stellio の compose を同時に動かすと衝突します。
-- Kafka のポートは `127.0.0.1:29092` に公開しています(Kafka が広告するアドレスと同じ番号です)。同じ番号を使う別の Kafka が手元で動いていると、起動に失敗します。その場合は、`compose/stellio/stellio.env` の `KAFKA_PORT` を変えてください(ホストの Kafka クライアントからは使えなくなりますが、Stellio の動作には影響しません)。
+- 自分の PC(`127.0.0.1`)で使うポートは、1883、9001(Mosquitto)、8081(`@context` の配信)、8080(Stellio の API)、18083、18084(Stellio の内部のサービス)、55432(Stellio の PostgreSQL)、29092(Kafka)、4173(地図アプリの `web:preview`)です。同じ番号を使うものが動いていると、起動に失敗します。
+- Kafka の 29092 は、Kafka が広告するアドレスと同じ番号です。別の Kafka とぶつかるときは、`compose/stellio/stellio.env` の `KAFKA_PORT` を変えてください(ホストの Kafka クライアントからは使えなくなりますが、Stellio の動作には影響しません)。
 - `compose/stellio/` のファイルは、Stellio の Apache License 2.0 のファイルです([compose/NOTICE.md](compose/NOTICE.md))。
 
 ## 仕組み
